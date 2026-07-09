@@ -38,3 +38,28 @@ def format_bonus(btype: BonusType, value: float) -> str:
     if btype in PERCENT_BONUSES:
         return f"+{value * 100:.0f}% {btype.value}"
     return f"+{value:g} {btype.value}"
+
+
+# --- permanent upgrades (bought from the merchant) -------------------------
+#: How much one purchased upgrade raises a stat.
+UPGRADE_STEP = {
+    BonusType.MAX_HP: 5,
+    BonusType.DAMAGE: 2,
+    BonusType.ATTACK_RANGE: 1,
+    BonusType.VIEW_RADIUS: 1,
+    BonusType.CRIT_CHANCE: 0.02,
+    BonusType.DODGE_CHANCE: 0.02,
+    BonusType.HEAL_POWER: 1,
+}
+
+#: Gold cost of the *first* upgrade of each stat; later ones cost more (see
+#: ``Config.upgrade_cost_growth``).  Powerful stats start pricier.
+UPGRADE_BASE_COST = {
+    BonusType.MAX_HP: 40,
+    BonusType.DAMAGE: 70,
+    BonusType.ATTACK_RANGE: 400,
+    BonusType.VIEW_RADIUS: 150,
+    BonusType.CRIT_CHANCE: 90,
+    BonusType.DODGE_CHANCE: 90,
+    BonusType.HEAL_POWER: 50,
+}

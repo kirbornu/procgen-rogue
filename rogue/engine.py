@@ -10,7 +10,7 @@ from typing import Optional
 
 from . import config
 from .actions import Action
-from .bonuses import BonusType
+from .bonuses import UPGRADE_BASE_COST, UPGRADE_STEP, BonusType, format_bonus
 from .entity import Entity, RenderOrder
 from .items import Item, generate_item
 from .message_log import MessageLog
@@ -32,6 +32,8 @@ class Engine:
         self.game_over = False
         #: While True the FOV radius is boosted; cleared as soon as the player moves.
         self.scouting = False
+        #: The merchant whose shop is open, or None.
+        self.shop: Optional[Entity] = None
 
         # ``generator(cfg, rng, depth, player) -> (GameMap, player)``; defaults
         # to the noise cave.  Tests inject the faster room generator.
@@ -56,10 +58,14 @@ class Engine:
         if not result.advances_turn:
             return
 
-        # Relocating cancels the scouting FOV bonus and may step onto a portal.
+        # Relocating cancels the scouting FOV bonus and may step onto a portal
+        # or the down-stairs.
         if (self.player.x, self.player.y) != before:
             self.scouting = False
             self._maybe_teleport()
+            if self.on_stairs():
+                self.descend()  # rebuilds the world + FOV itself
+                return
 
         # Auto-attack fires on ordinary turns (moving/waiting) but not while the
         # player is occupied with an activity such as healing or scouting.
@@ -98,7 +104,7 @@ class Engine:
                 entity.ai.take_turn(self)
 
     def update_fov(self) -> None:
-        radius = self.cfg.fov_radius + int(self._equipment_bonus(BonusType.VIEW_RADIUS))
+        radius = self.cfg.fov_radius + int(self._player_bonus(BonusType.VIEW_RADIUS))
         if self.scouting:
             radius += self.cfg.scout_fov_bonus
         self.game_map.compute_fov(self.player.x, self.player.y, radius)
@@ -130,13 +136,20 @@ class Engine:
             config.TITLE_COLOR,
         )
 
-    # --- equipment-derived player values -----------------------------------
-    def _equipment_bonus(self, btype: BonusType) -> float:
+    # --- equipment/upgrade-derived player values ---------------------------
+    def _player_bonus(self, btype: BonusType) -> float:
+        """Sum of the player's equipped-item and permanent-upgrade bonuses."""
+        total = 0.0
         equipment = self.player.get("equipment")
-        return equipment.total(btype) if equipment is not None else 0
+        if equipment is not None:
+            total += equipment.total(btype)
+        upgrades = self.player.get("upgrades")
+        if upgrades is not None:
+            total += upgrades.total(btype)
+        return total
 
     def heal_amount(self) -> int:
-        return self.cfg.heal_amount + int(self._equipment_bonus(BonusType.HEAL_POWER))
+        return self.cfg.heal_amount + int(self._player_bonus(BonusType.HEAL_POWER))
 
     def toggle_equip(self, item: Item) -> None:
         """Equip or unequip an inventory item (max two in use at once)."""
@@ -151,6 +164,76 @@ class Engine:
         else:
             self.log.add("You can only use two items at once.", config.TEXT_DIM)
         self.update_fov()  # a view-radius item may have changed sight
+
+    def character_sheet(self) -> list[tuple[str, str]]:
+        """(label, value) pairs of the player's current effective stats."""
+        fighter = self.player.fighter
+        progress = self.player.get("progress")
+        view = self.cfg.fov_radius + int(self._player_bonus(BonusType.VIEW_RADIUS))
+        return [
+            ("Max HP", str(fighter.max_hp)),
+            ("Damage", str(fighter.power)),
+            ("Defense", str(fighter.defense)),
+            ("Atk Range", str(fighter.attack_range)),
+            ("Crit", f"{fighter.crit_chance * 100:.0f}%"),
+            ("Dodge", f"{fighter.dodge_chance * 100:.0f}%"),
+            ("View", str(view)),
+            ("Heal", str(self.heal_amount())),
+            ("Gold", str(progress.gold if progress else 0)),
+        ]
+
+    # --- merchant / shop ---------------------------------------------------
+    def open_shop(self, merchant: Entity) -> None:
+        self.shop = merchant
+        self.log.add("The merchant lays out their wares.", config.MERCHANT_COLOR)
+
+    def close_shop(self) -> None:
+        self.shop = None
+
+    def upgrade_cost(self, btype: BonusType) -> int:
+        """Gold cost of the next upgrade of ``btype`` (rises with each bought)."""
+        upgrades = self.player.get("upgrades")
+        owned = upgrades.count(btype) if upgrades is not None else 0
+        return round(UPGRADE_BASE_COST[btype] * self.cfg.upgrade_cost_growth ** owned)
+
+    def shop_rows(self) -> list[tuple]:
+        """Rows shown in the shop: buyable upgrades, then sellable items."""
+        rows = [("upgrade", btype) for btype in BonusType]
+        rows += [("sell", item) for item in self.player.inventory.items]
+        return rows
+
+    def buy_upgrade(self, btype: BonusType) -> None:
+        progress = self.player.get("progress")
+        upgrades = self.player.get("upgrades")
+        if progress is None or upgrades is None:
+            return
+        cost = self.upgrade_cost(btype)
+        if progress.gold < cost:
+            self.log.add("Not enough gold.", config.TEXT_DIM)
+            return
+        progress.gold -= cost
+        upgrades.buy(btype)
+        self.update_fov()
+        self.log.add(
+            f"Upgraded {format_bonus(btype, UPGRADE_STEP[btype])} for {cost}g.",
+            config.MERCHANT_COLOR,
+        )
+
+    def sell_item(self, item: Item) -> None:
+        inventory = self.player.inventory
+        equipment = self.player.get("equipment")
+        progress = self.player.get("progress")
+        if item not in inventory.items:
+            return
+        if equipment is not None and equipment.is_equipped(item):
+            equipment.equipped.remove(item)
+            self.player.fighter.clamp_hp()
+        inventory.items.remove(item)
+        price = self.cfg.sell_price_per_level * item.level
+        if progress is not None:
+            progress.gold += price
+        self.update_fov()
+        self.log.add(f"Sold {item.display_name} for {price}g.", config.MERCHANT_COLOR)
 
     # --- combat outcomes ---------------------------------------------------
     def kill(self, target: Entity, killer: Entity) -> None:

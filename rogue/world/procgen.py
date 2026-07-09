@@ -13,7 +13,14 @@ from typing import Iterator, List, Tuple, TYPE_CHECKING
 
 from .. import config
 from ..rng import Rng
-from ..spawn import make_monster, make_player, make_stairs, make_teleport
+from ..spawn import (
+    make_decoration,
+    make_merchant,
+    make_monster,
+    make_player,
+    make_stairs,
+    make_teleport,
+)
 from . import tiles
 from .game_map import GameMap
 from .noise import generate as generate_noise
@@ -200,7 +207,9 @@ def generate_noise_dungeon(
         occupied.add(entry)
         occupied.add(exit_cell)
 
+    _place_merchant(game_map, chain, cfg, rng, occupied)
     _populate_cave(game_map, chain, cfg, rng, occupied, depth)
+    _decorate_cave(game_map, chain, cfg, rng, occupied)
     return game_map, player
 
 
@@ -254,3 +263,70 @@ def _populate_cave(game_map, regions, cfg, rng, occupied, depth: int) -> None:
     count = min(base + (depth - 1) * base // 2, cfg.max_monsters * depth, len(spots))
     for mx, my in rng.sample(spots, count) if count > 0 else []:
         game_map.entities.append(make_monster(rng, mx, my, depth))
+
+
+def _place_merchant(game_map, chain, cfg, rng, occupied) -> None:
+    """Maybe drop a merchant into a random region, ringed by crates."""
+    if not rng.chance(cfg.merchant_chance):
+        return
+    region = rng.choice(chain)
+    free = [c for c in region if c not in occupied]
+    if not free:
+        return
+    mx, my = rng.choice(free)
+    game_map.entities.append(make_merchant(mx, my))
+    occupied.add((mx, my))
+
+    # Lots of crates around the merchant's stall.
+    nearby = [
+        c
+        for c in region
+        if c not in occupied and abs(c[0] - mx) <= 3 and abs(c[1] - my) <= 3
+    ]
+    rng.shuffle(nearby)
+    for cell in nearby[: cfg.merchant_box_count]:
+        game_map.entities.append(make_decoration("box", *cell))
+        occupied.add(cell)
+
+
+def _decorate_cave(game_map, chain, cfg, rng, occupied) -> None:
+    """Scatter cosmetic trash, water ponds and crates over the floor."""
+    decorated: set = set()
+
+    for _ in range(cfg.water_clusters):
+        floor = [c for region in chain for c in region if c not in occupied and c not in decorated]
+        if not floor:
+            break
+        _grow_blob(game_map, rng.choice(floor), cfg.water_cluster_size, occupied, decorated, rng, "water")
+
+    floor_count = sum(len(region) for region in chain)
+    _scatter(game_map, chain, int(floor_count * cfg.trash_fraction), occupied, decorated, rng, "trash")
+    _scatter(game_map, chain, cfg.box_count, occupied, decorated, rng, "box")
+
+
+def _grow_blob(game_map, seed, size, occupied, decorated, rng, kind) -> None:
+    """Flood a rough blob of decorations of ``kind`` outward from ``seed``."""
+    walkable = game_map.tiles["walkable"]
+    w, h = game_map.width, game_map.height
+    frontier = [seed]
+    placed = 0
+    while frontier and placed < size:
+        x, y = frontier.pop(rng.randint(0, len(frontier) - 1))
+        if (x, y) in occupied or (x, y) in decorated or not walkable[x, y]:
+            continue
+        game_map.entities.append(make_decoration(kind, x, y))
+        decorated.add((x, y))
+        placed += 1
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            nx, ny = x + dx, y + dy
+            if 0 <= nx < w and 0 <= ny < h and walkable[nx, ny] and (nx, ny) not in occupied and (nx, ny) not in decorated:
+                frontier.append((nx, ny))
+
+
+def _scatter(game_map, chain, count, occupied, decorated, rng, kind) -> None:
+    candidates = [c for region in chain for c in region if c not in occupied and c not in decorated]
+    if count <= 0 or not candidates:
+        return
+    for cell in rng.sample(candidates, min(count, len(candidates))):
+        game_map.entities.append(make_decoration(kind, *cell))
+        decorated.add(cell)
