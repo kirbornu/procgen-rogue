@@ -20,6 +20,9 @@ from .ui.renderer import Renderer
 
 
 def run(seed: Optional[int] = None, cfg: config.Config = config.DEFAULT) -> None:
+    # Noise-cave generation is pure Python and takes a few seconds; tell the
+    # player something is happening before the window opens.
+    print("Generating cave...", flush=True)
     engine = Engine(cfg=cfg, seed=seed)
     renderer = Renderer(cfg)
     # order="F" makes console.rgb indexable as [x, y], matching the map arrays.

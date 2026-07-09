@@ -16,11 +16,16 @@ from .items import Item, generate_item
 from .message_log import MessageLog
 from .rng import Rng
 from .world.game_map import GameMap
-from .world.procgen import generate_dungeon
+from .world.procgen import generate_noise_dungeon
 
 
 class Engine:
-    def __init__(self, cfg: config.Config = config.DEFAULT, seed: Optional[int] = None) -> None:
+    def __init__(
+        self,
+        cfg: config.Config = config.DEFAULT,
+        seed: Optional[int] = None,
+        generator=None,
+    ) -> None:
         self.cfg = cfg
         self.rng = Rng(seed)
         self.log = MessageLog()
@@ -28,7 +33,10 @@ class Engine:
         #: While True the FOV radius is boosted; cleared as soon as the player moves.
         self.scouting = False
 
-        self.game_map, self.player = generate_dungeon(cfg, self.rng)
+        # ``generator(cfg, rng) -> (GameMap, player)``; defaults to the noise
+        # cave.  Tests inject the faster room generator.
+        generate = generator or generate_noise_dungeon
+        self.game_map, self.player = generate(cfg, self.rng)
         self.update_fov()
         self.log.add("You descend into the dungeon.", config.TITLE_COLOR)
 

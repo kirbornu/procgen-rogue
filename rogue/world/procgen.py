@@ -16,6 +16,7 @@ from ..rng import Rng
 from ..spawn import make_monster, make_player
 from . import tiles
 from .game_map import GameMap
+from .noise import generate as generate_noise
 
 if TYPE_CHECKING:
     from ..entity import Entity
@@ -121,4 +122,87 @@ def _populate_room(
         my = rng.randint(room.y1 + 1, room.y2 - 1)
         if any(True for _ in game_map.entities_at(mx, my)):
             continue
+        game_map.entities.append(make_monster(rng, mx, my))
+
+
+# ---------------------------------------------------------------------------
+# Noise-cave generator (the default)
+#
+# The Noise Lab script produces a greyscale field; a cell is a wall wherever the
+# brightness is above ``wall_threshold`` and floor otherwise.  Because the noise
+# leaves the floor split into disconnected caverns, the player and every monster
+# are placed inside the single largest connected region so the whole playable
+# area is reachable (isolated pockets simply read as unexplored rock).
+# ---------------------------------------------------------------------------
+
+
+def generate_noise_dungeon(cfg: config.Config, rng: Rng) -> Tuple[GameMap, "Entity"]:
+    """Build a cave from the noise generator and return ``(game_map, player)``."""
+    n = cfg.noise_map_size
+    noise_seed = rng.randint(1, 2**31 - 1)
+    grid = generate_noise(noise_seed, n)  # grid[y][x] brightness in [0, 1]
+
+    game_map = GameMap(n, n)
+    threshold = cfg.wall_threshold
+    for y in range(n):
+        row = grid[y]
+        for x in range(n):
+            if row[x] <= threshold:  # bright -> wall, dark -> floor
+                game_map.tiles[x, y] = tiles.FLOOR
+
+    region = _largest_floor_region(game_map)
+    if not region:  # pathological all-wall map: carve a single safe tile
+        cx, cy = n // 2, n // 2
+        game_map.tiles[cx, cy] = tiles.FLOOR
+        region = [(cx, cy)]
+
+    px, py = rng.choice(region)
+    player = make_player(px, py, cfg)
+    game_map.entities.append(player)
+    _populate_cave(game_map, region, cfg, rng, player_pos=(px, py))
+    return game_map, player
+
+
+def _largest_floor_region(game_map: GameMap) -> List[Tuple[int, int]]:
+    """Return the cells of the biggest 8-connected walkable region."""
+    width, height = game_map.width, game_map.height
+    walkable = game_map.tiles["walkable"]
+    seen = [[False] * height for _ in range(width)]
+    best: List[Tuple[int, int]] = []
+
+    for sx in range(width):
+        for sy in range(height):
+            if seen[sx][sy] or not walkable[sx, sy]:
+                continue
+            stack = [(sx, sy)]
+            seen[sx][sy] = True
+            region: List[Tuple[int, int]] = []
+            while stack:
+                x, y = stack.pop()
+                region.append((x, y))
+                for dx in (-1, 0, 1):
+                    for dy in (-1, 0, 1):
+                        if dx == 0 and dy == 0:
+                            continue
+                        nx, ny = x + dx, y + dy
+                        if 0 <= nx < width and 0 <= ny < height and not seen[nx][ny] and walkable[nx, ny]:
+                            seen[nx][ny] = True
+                            stack.append((nx, ny))
+            if len(region) > len(best):
+                best = region
+    return best
+
+
+def _populate_cave(
+    game_map: GameMap,
+    region: List[Tuple[int, int]],
+    cfg: config.Config,
+    rng: Rng,
+    player_pos: Tuple[int, int],
+) -> None:
+    spots = [cell for cell in region if cell != player_pos]
+    if not spots:
+        return
+    count = min(cfg.max_monsters, len(spots) // cfg.monster_spacing)
+    for mx, my in rng.sample(spots, count) if count > 0 else []:
         game_map.entities.append(make_monster(rng, mx, my))
