@@ -7,6 +7,3 @@ venv/
 .mypy_cache/
 build/
 dist/
-
-# Noise Lab (веб-песочница) — держим локально, вне истории репозитория
-noizelab/
