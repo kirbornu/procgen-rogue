@@ -24,6 +24,8 @@ PLAYER_COLOR = (0xFF, 0xFF, 0xFF)
 MONSTER_COLOR = (0xD0, 0x50, 0x50)
 CORPSE_COLOR = (0x9E, 0x2A, 0x2A)
 ITEM_COLOR = (0xC8, 0xA8, 0x50)
+TELEPORT_COLOR = (0x50, 0xE0, 0xE0)
+STAIRS_COLOR = (0xF0, 0xE0, 0x50)
 
 HP_BAR_FILLED = (0x30, 0x80, 0x30)
 HP_BAR_EMPTY = (0x60, 0x18, 0x18)
@@ -61,8 +63,9 @@ class Config:
     # cell is a wall wherever the noise brightness exceeds ``wall_threshold``.
     noise_map_size: int = 88
     wall_threshold: float = 0.4
-    max_monsters: int = 40  # cap for a whole cave
-    monster_spacing: int = 45  # ~1 monster per this many reachable floor tiles
+    max_monsters: int = 40  # cap for a whole cave (grows with depth)
+    monster_spacing: int = 45  # ~1 monster per this many floor tiles
+    min_teleport_region: int = 2  # smallest region that still gets a teleport
 
     # Combat / progression.
     player_hp: int = 30

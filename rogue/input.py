@@ -12,7 +12,7 @@ from typing import Optional, Union
 
 import tcod.event
 
-from .actions import Action, BumpAction, HealAction, ScoutAction, WaitAction
+from .actions import Action, BumpAction, DescendAction, HealAction, ScoutAction, WaitAction
 from .entity import Entity
 
 K = tcod.event.KeySym
@@ -73,9 +73,13 @@ def dispatch(event: tcod.event.Event, player: Entity) -> Dispatch:
         return None
 
     key = event.sym
+    shift = bool(event.mod & tcod.event.Modifier.SHIFT)
     if key in MOVE_KEYS:
         dx, dy = MOVE_KEYS[key]
         return BumpAction(player, dx, dy)
+    # '>' (either a direct GREATER key or Shift+'.') descends the stairs.
+    if key == K.GREATER or (key == K.PERIOD and shift):
+        return DescendAction(player)
     if key in WAIT_KEYS:
         return WaitAction(player)
     if key == K.R:

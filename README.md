@@ -9,9 +9,9 @@ so it can be tested head-lessly.
      #####.######
      #..........#
      #..........#
-     #.....g....#      @  you            g  a monster
-     #.......@..#      #  wall           %  remains
-     ############      .  floor          /  loot (an item)
+     #.....g..O.#      @  you       #  wall     O  portal
+     #.......@..#      g  monster    .  floor    >  stairs down
+     #....>......#      %  remains    /  loot (an item)
 ```
 
 ## What's in the box (the brief, implemented)
@@ -20,9 +20,15 @@ so it can be tested head-lessly.
 - **One player** (`@`) with a **camera that follows** and scrolls the map.
 - **Procedural caves**: the default map comes from a multi-layer noise field
   (the "Noise Lab" generator) — a cell is a wall wherever the noise brightness
-  is above `0.4`, floor otherwise. The player and all monsters are placed in the
-  single largest connected region so everything is reachable. (A classic
-  rooms-and-corridors generator is still bundled and used by the tests.)
+  is above `0.4`, floor otherwise. (A classic rooms-and-corridors generator is
+  still bundled and used by the tests.)
+- **Portals** (`O`): the noise splits the floor into disconnected regions, so
+  each region gets one portal and the portals are wired into a single **closed
+  cycle** — step on a portal to jump to the next region's portal, making the
+  whole map traversable.
+- **Descending** (`>`): the down-stairs take you to a freshly generated, deeper
+  level where monsters are **stronger and more numerous**. Your HP, gold,
+  inventory and equipment carry over.
 - **Procedural monsters**: each rolls random HP, attack power, crit and dodge
   chances, and a **speed** (0..1 chance to step toward you each turn, so some
   stand still and some roam). A monster's overall danger sets both its **colour**
@@ -66,6 +72,7 @@ python main.py --seed 42  # reproducible dungeon
 | `.` · numpad `5` | Wait a turn |
 | `r` | Heal (activity: restore HP) |
 | `s` | Scout (activity: widen view until you move) |
+| `>` | Descend (while standing on the down-stairs) |
 | `i` | Open / close inventory |
 | `j`/`k` · ↑/↓ | (in inventory) move selection |
 | `Enter` · `e` | (in inventory) equip / unequip selected item |
