@@ -63,6 +63,7 @@ class Config:
     player_defense: int = 2
     player_attack_range: int = 1  # auto-attack reach, in tiles (Chebyshev)
     inventory_capacity: int = 64
+    equipment_slots: int = 2  # how many items the player can use at once
 
     # Activities (deliberate turns that suppress the auto-attack).
     heal_amount: int = 1  # HP restored per "heal" activity
@@ -81,6 +82,11 @@ class Config:
     def log_row(self) -> int:
         """First row of the scrolling message log."""
         return self.map_view_height + 1
+
+    @property
+    def controls_row(self) -> int:
+        """Bottom row reserved for the always-on key-hint bar."""
+        return self.screen_height - 1
 
 
 DEFAULT = Config()

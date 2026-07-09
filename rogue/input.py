@@ -54,6 +54,15 @@ class Command(enum.Enum):
     TOGGLE_INVENTORY = enum.auto()
 
 
+class InvCommand(enum.Enum):
+    """Navigation while the inventory overlay is open."""
+
+    UP = enum.auto()
+    DOWN = enum.auto()
+    EQUIP = enum.auto()  # toggle equip/unequip the selected item
+    CLOSE = enum.auto()
+
+
 Dispatch = Union[Action, Command, None]
 
 
@@ -77,4 +86,23 @@ def dispatch(event: tcod.event.Event, player: Entity) -> Dispatch:
         return Command.TOGGLE_INVENTORY
     if key in (K.ESCAPE, K.Q):
         return Command.QUIT
+    return None
+
+
+def dispatch_inventory(event: tcod.event.Event) -> Optional[InvCommand]:
+    """Key handling while the inventory overlay is open."""
+    if isinstance(event, tcod.event.Quit):
+        return InvCommand.CLOSE
+    if not isinstance(event, tcod.event.KeyDown):
+        return None
+
+    key = event.sym
+    if key in (K.UP, K.K, K.KP_8):
+        return InvCommand.UP
+    if key in (K.DOWN, K.J, K.KP_2):
+        return InvCommand.DOWN
+    if key in (K.RETURN, K.KP_ENTER, K.E):
+        return InvCommand.EQUIP
+    if key in (K.I, K.ESCAPE):
+        return InvCommand.CLOSE
     return None

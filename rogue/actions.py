@@ -60,7 +60,7 @@ class HealAction(Action):
         fighter = self.actor.fighter
         if fighter is None:
             return ActionResult(advances_turn=False)
-        recovered = fighter.heal(engine.cfg.heal_amount)
+        recovered = fighter.heal(engine.heal_amount())
         if recovered > 0:
             engine.log.add(f"You tend your wounds (+{recovered} HP).", config.HP_BAR_FILLED)
         else:
@@ -118,26 +118,38 @@ class MeleeAction(Action):
 
     def resolve(self, engine: "Engine") -> None:
         attacker, target = self.actor, self.target
-        if attacker.fighter is None or target.fighter is None:
+        af, tf = attacker.fighter, target.fighter
+        if af is None or tf is None:
             return
 
-        damage = max(0, attacker.fighter.power - target.fighter.defense)
         by_player = attacker is engine.player
-        color = config.HP_BAR_FILLED if by_player else config.MONSTER_COLOR
         hit = "hit" if by_player else "hits"  # "You hit" vs "Goblin hits"
 
+        # The defender may evade the blow entirely.
+        if engine.rng.chance(tf.dodge_chance):
+            dodge = "dodge" if target is engine.player else "dodges"
+            engine.log.add(f"{target.name} {dodge} the blow.", config.TEXT_DIM)
+            return
+
+        damage = max(0, af.power - tf.defense)
+        crit = engine.rng.chance(af.crit_chance)
+        if crit:
+            damage *= 2
+
         if damage > 0:
-            engine.log.add(
-                f"{attacker.name} {hit} {target.name} for {damage}.", color
+            suffix = " (crit!)" if crit else ""
+            color = config.TITLE_COLOR if crit else (
+                config.HP_BAR_FILLED if by_player else config.MONSTER_COLOR
             )
-            target.fighter.take_damage(damage)
+            engine.log.add(f"{attacker.name} {hit} {target.name} for {damage}{suffix}.", color)
+            tf.take_damage(damage)
         else:
             engine.log.add(
                 f"{attacker.name} {hit} {target.name} but deal no damage.",
                 config.TEXT_DIM,
             )
 
-        if target.fighter.hp <= 0:
+        if tf.hp <= 0:
             engine.kill(target, attacker)
 
     def perform(self, engine: "Engine") -> ActionResult:
