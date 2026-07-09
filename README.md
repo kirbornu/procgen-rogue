@@ -18,7 +18,11 @@ so it can be tested head-lessly.
 
 - **ASCII only**, rendered in a Dwarf-Fortress-style grid (tcod/SDL window).
 - **One player** (`@`) with a **camera that follows** and scrolls the map.
-- **Procedural dungeon**: simple square rooms joined by right-angle corridors.
+- **Procedural caves**: the default map comes from a multi-layer noise field
+  (the "Noise Lab" generator) — a cell is a wall wherever the noise brightness
+  is above `0.4`, floor otherwise. The player and all monsters are placed in the
+  single largest connected region so everything is reachable. (A classic
+  rooms-and-corridors generator is still bundled and used by the tests.)
 - **Procedural monsters**: each rolls random HP, attack power, crit and dodge
   chances, and a **speed** (0..1 chance to step toward you each turn, so some
   stand still and some roam). A monster's overall danger sets both its **colour**
@@ -99,7 +103,8 @@ rogue/
 ├── world/
 │   ├── tiles.py        tile records (walkable/transparent + lit/dark glyphs)
 │   ├── game_map.py     terrain grid, visibility, entities, FOV
-│   └── procgen.py      rooms + corridors generator
+│   ├── noise.py        Noise Lab field generator (stdlib only)
+│   └── procgen.py      generators: noise cave (default) + rooms/corridors
 └── ui/
     ├── camera.py       viewport that follows the player and clamps to edges
     └── renderer.py     draws map, fog, entities, HUD, log, overlays
@@ -126,8 +131,9 @@ Some concrete "next ideas" and where they go:
   the same pattern `HealAction` and `ScoutAction` use.
 - **New terrain** (water, lava, doors) — one `new_tile(...)` call in `tiles.py`;
   FOV and rendering pick it up automatically.
-- **Different map styles** (caves, BSP, vaults) — a sibling module to
-  `procgen.py` returning a `GameMap`; nothing downstream cares how it was built.
+- **Different map styles** (BSP, vaults, a different noise config) — write a
+  `generator(cfg, rng) -> (GameMap, player)` and pass it to `Engine(generator=…)`;
+  nothing downstream cares how the map was built.
 - **Descending / multiple levels, saving, XP levels, ranged combat** — the
   engine already isolates state, so these are additive.
 

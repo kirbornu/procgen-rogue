@@ -19,7 +19,18 @@ from rogue.rng import Rng
 from rogue.spawn import danger_color, danger_level, make_monster
 from rogue.ui.camera import Camera
 from rogue.world.game_map import GameMap
-from rogue.world.procgen import generate_dungeon
+from rogue.world.procgen import generate_dungeon, generate_noise_dungeon
+
+
+def make_engine(**kwargs):
+    """Engine wired to the fast, fully-connected room generator.
+
+    The real game defaults to the pure-Python noise cave, which takes a few
+    seconds to build; tests use rooms so the suite stays quick and combat starts
+    from a predictable, connected layout.
+    """
+    kwargs.setdefault("generator", generate_dungeon)
+    return Engine(**kwargs)
 
 
 def test_generation_is_deterministic_and_placed_player():
@@ -33,7 +44,7 @@ def test_generation_is_deterministic_and_placed_player():
 
 
 def test_fov_radius_limits_visibility():
-    engine = Engine(seed=7)
+    engine = make_engine(seed=7)
     px, py = engine.player.x, engine.player.y
     # Nothing outside the fog-of-war radius is visible.
     for x in range(engine.game_map.width):
@@ -43,12 +54,12 @@ def test_fov_radius_limits_visibility():
 
 
 def test_wait_advances_turn():
-    engine = Engine(seed=1)
+    engine = make_engine(seed=1)
     assert WaitAction(engine.player).perform(engine).advances_turn
 
 
 def test_move_into_wall_is_blocked():
-    engine = Engine(seed=1)
+    engine = make_engine(seed=1)
     # Force a wall next to the player and confirm we cannot step into it.
     from rogue.world import tiles
 
@@ -82,7 +93,7 @@ def _adjacent_monster(engine, **kwargs):
 
 
 def test_bump_attack_kills_monster_and_awards_loot():
-    engine = Engine(seed=1)
+    engine = make_engine(seed=1)
     monster = _adjacent_monster(engine, hp=1)
     engine.handle_player_action(BumpAction(engine.player, 1, 0))
 
@@ -96,7 +107,7 @@ def test_bump_attack_kills_monster_and_awards_loot():
 
 
 def test_monster_retaliates_when_adjacent():
-    engine = Engine(seed=1)
+    engine = make_engine(seed=1)
     _adjacent_monster(engine, hp=50)  # tough enough to survive and hit back
     start_hp = engine.player.fighter.hp
     engine.handle_player_action(WaitAction(engine.player))
@@ -104,7 +115,7 @@ def test_monster_retaliates_when_adjacent():
 
 
 def test_auto_attack_strikes_enemy_in_range_on_wait():
-    engine = Engine(seed=1)
+    engine = make_engine(seed=1)
     monster = _adjacent_monster(engine, hp=50)
     before = monster.fighter.hp
     # Waiting is not an activity, so the auto-attack fires.
@@ -113,14 +124,14 @@ def test_auto_attack_strikes_enemy_in_range_on_wait():
 
 
 def test_heal_restores_hp():
-    engine = Engine(seed=1)  # player starts alone in the first room
+    engine = make_engine(seed=1)  # player starts alone in the first room
     engine.player.fighter.hp = 5
     engine.handle_player_action(HealAction(engine.player))
     assert engine.player.fighter.hp == 5 + config.DEFAULT.heal_amount
 
 
 def test_activity_suppresses_auto_attack():
-    engine = Engine(seed=1)
+    engine = make_engine(seed=1)
     monster = _adjacent_monster(engine, hp=50)
     before = monster.fighter.hp
     # Healing is an activity, so the player does not auto-attack this turn.
@@ -129,7 +140,7 @@ def test_activity_suppresses_auto_attack():
 
 
 def test_scouting_boosts_fov_and_clears_on_move():
-    engine = Engine(seed=3)
+    engine = make_engine(seed=3)
     engine.scouting = False
     engine.update_fov()
     base = int(engine.game_map.visible.sum())
@@ -138,7 +149,7 @@ def test_scouting_boosts_fov_and_clears_on_move():
     assert int(engine.game_map.visible.sum()) >= base
 
     # Performing the scout activity sets the state...
-    engine = Engine(seed=3)
+    engine = make_engine(seed=3)
     engine.handle_player_action(ScoutAction(engine.player))
     assert engine.scouting is True
 
@@ -155,7 +166,7 @@ def test_scouting_boosts_fov_and_clears_on_move():
 
 def test_attack_range_reaches_beyond_adjacent():
     cfg = replace(config.DEFAULT, player_attack_range=2)
-    engine = Engine(cfg=cfg, seed=1)
+    engine = make_engine(cfg=cfg, seed=1)
     # Enemy two tiles away: out of a range-1 reach, in range for this config.
     monster = _place_monster(engine, 2, 0, hp=50)
     before = monster.fighter.hp
@@ -176,7 +187,7 @@ def test_generated_item_is_bounded_and_named_by_level():
 
 
 def test_equipment_is_limited_to_two_items():
-    engine = Engine(seed=1)
+    engine = make_engine(seed=1)
     eq = engine.player.get("equipment")
     items = [generate_item(engine.rng, 3) for _ in range(3)]
     for item in items:
@@ -192,7 +203,7 @@ def test_equipment_is_limited_to_two_items():
 
 
 def test_equipped_bonuses_apply_and_revert():
-    engine = Engine(seed=1)
+    engine = make_engine(seed=1)
     fighter = engine.player.fighter
     base_hp, base_power = fighter.max_hp, fighter.power
 
@@ -212,7 +223,7 @@ def test_equipped_bonuses_apply_and_revert():
 
 
 def test_view_and_heal_bonuses_reach_the_engine():
-    engine = Engine(seed=1)
+    engine = make_engine(seed=1)
     base_heal = engine.heal_amount()
     item = generate_item(engine.rng, 3)
     item.bonuses.clear()
@@ -280,7 +291,7 @@ def test_input_dispatch_maps_keys():
 
     from rogue.input import Command, dispatch
 
-    engine = Engine(seed=1)
+    engine = make_engine(seed=1)
     K = tcod.event.KeySym
 
     def key(sym):
@@ -298,3 +309,43 @@ def test_input_dispatch_maps_keys():
     assert dispatch(key(K.ESCAPE), engine.player) is Command.QUIT
     # Unbound keys are ignored.
     assert dispatch(key(K.F1), engine.player) is None
+
+
+def test_noise_dungeon_is_playable_and_deterministic():
+    # Small map keeps the pure-Python noise fast enough for a unit test.
+    cfg = replace(config.DEFAULT, noise_map_size=48)
+
+    map_a, player_a = generate_noise_dungeon(cfg, Rng(7))
+    map_b, player_b = generate_noise_dungeon(cfg, Rng(7))
+    # Deterministic for a given seed.
+    assert (map_a.tiles == map_b.tiles).all()
+    assert (player_a.x, player_a.y) == (player_b.x, player_b.y)
+
+    # Walls follow the brightness threshold: the map has both walls and floor.
+    walkable = map_a.tiles["walkable"]
+    assert walkable.any() and not walkable.all()
+
+    # The player spawns on floor, and every monster shares the player's
+    # connected region (so nothing is walled off from the fight).
+    assert map_a.is_walkable(player_a.x, player_a.y)
+    region = set(_flood_region(map_a, player_a.x, player_a.y))
+    monsters = [e for e in map_a.entities if e is not player_a]
+    assert monsters, "expected the cave to be populated"
+    assert all((m.x, m.y) in region for m in monsters)
+
+
+def _flood_region(game_map, sx, sy):
+    """All cells 8-connected to (sx, sy) over walkable tiles."""
+    walkable = game_map.tiles["walkable"]
+    w, h = game_map.width, game_map.height
+    seen = {(sx, sy)}
+    stack = [(sx, sy)]
+    while stack:
+        x, y = stack.pop()
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                nx, ny = x + dx, y + dy
+                if 0 <= nx < w and 0 <= ny < h and (nx, ny) not in seen and walkable[nx, ny]:
+                    seen.add((nx, ny))
+                    stack.append((nx, ny))
+    return seen

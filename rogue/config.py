@@ -51,11 +51,18 @@ class Config:
     # Field of view (the "fog of war radius" from the brief).
     fov_radius: int = 10
 
-    # Dungeon generation.
+    # Dungeon generation (rooms-and-corridors generator).
     room_max_size: int = 12
     room_min_size: int = 6
     max_rooms: int = 32
     max_monsters_per_room: int = 2
+
+    # Noise-cave generator (the default). The map is a square of this side; a
+    # cell is a wall wherever the noise brightness exceeds ``wall_threshold``.
+    noise_map_size: int = 88
+    wall_threshold: float = 0.4
+    max_monsters: int = 40  # cap for a whole cave
+    monster_spacing: int = 45  # ~1 monster per this many reachable floor tiles
 
     # Combat / progression.
     player_hp: int = 30
