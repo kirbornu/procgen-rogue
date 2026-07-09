@@ -9,7 +9,7 @@ from dataclasses import replace
 
 from rogue import config
 from rogue.actions import BumpAction, HealAction, MoveAction, ScoutAction, WaitAction
-from rogue.bonuses import BonusType
+from rogue.bonuses import UPGRADE_STEP, BonusType
 from rogue.components import Fighter, MonsterAI
 from rogue.engine import Engine
 from rogue.entity import Entity
@@ -234,7 +234,7 @@ def test_view_and_heal_bonuses_reach_the_engine():
     engine.toggle_equip(item)
 
     assert engine.heal_amount() == base_heal + 4
-    assert engine._equipment_bonus(BonusType.VIEW_RADIUS) == 3
+    assert engine._player_bonus(BonusType.VIEW_RADIUS) == 3
 
 
 def test_monster_moves_only_when_it_has_speed():
@@ -398,6 +398,93 @@ def test_deeper_monsters_are_tougher():
     shallow = [make_monster(rng, 0, 0, depth=1).fighter.base_max_hp for _ in range(60)]
     deep = [make_monster(rng, 0, 0, depth=6).fighter.base_max_hp for _ in range(60)]
     assert sum(deep) / len(deep) > sum(shallow) / len(shallow)
+
+
+# --- gold: merchant, upgrades, selling, decorations, auto-descend ----------
+def test_buy_upgrade_raises_stat_and_costs_escalate():
+    engine = make_engine(seed=1)
+    progress = engine.player.get("progress")
+    progress.gold = 1000
+    base = engine.player.fighter.max_hp
+
+    cost1 = engine.upgrade_cost(BonusType.MAX_HP)
+    engine.buy_upgrade(BonusType.MAX_HP)
+    assert engine.player.fighter.max_hp == base + UPGRADE_STEP[BonusType.MAX_HP]
+    assert progress.gold == 1000 - cost1
+    # The next upgrade of the same stat costs more.
+    assert engine.upgrade_cost(BonusType.MAX_HP) > cost1
+
+
+def test_upgrade_blocked_without_gold():
+    engine = make_engine(seed=1)
+    progress = engine.player.get("progress")
+    progress.gold = 0
+    base_power = engine.player.fighter.power
+    engine.buy_upgrade(BonusType.DAMAGE)
+    assert engine.player.fighter.power == base_power
+    assert progress.gold == 0
+
+
+def test_sell_item_gives_gold_and_removes_it():
+    engine = make_engine(seed=1)
+    progress = engine.player.get("progress")
+    progress.gold = 0
+    item = generate_item(engine.rng, 3)
+    engine.player.inventory.add(item)
+    engine.toggle_equip(item)
+
+    engine.sell_item(item)
+    assert progress.gold == engine.cfg.sell_price_per_level * 3
+    assert item not in engine.player.inventory.items
+    assert not engine.player.get("equipment").is_equipped(item)
+
+
+def test_character_sheet_reflects_upgrades():
+    engine = make_engine(seed=1)
+    engine.player.get("progress").gold = 1000
+    before = int(dict(engine.character_sheet())["Damage"])
+    engine.buy_upgrade(BonusType.DAMAGE)
+    after = int(dict(engine.character_sheet())["Damage"])
+    assert after > before
+
+
+def test_bumping_a_merchant_opens_the_shop():
+    from rogue.spawn import make_merchant
+    from rogue.world import tiles
+
+    engine = make_engine(seed=1)
+    px, py = engine.player.x, engine.player.y
+    engine.game_map.tiles[px + 1, py] = tiles.FLOOR
+    merchant = make_merchant(px + 1, py)
+    engine.game_map.entities.append(merchant)
+
+    engine.handle_player_action(BumpAction(engine.player, 1, 0))
+    assert engine.shop is merchant
+    assert (engine.player.x, engine.player.y) == (px, py)  # bumping spent no move
+
+
+def test_walking_onto_stairs_auto_descends():
+    from rogue.world import tiles
+
+    engine = make_engine(seed=1)
+    stairs = [e for e in engine.game_map.entities if e.has("stairs")][0]
+    engine.player.x, engine.player.y = stairs.x - 1, stairs.y
+    engine.game_map.tiles[stairs.x - 1, stairs.y] = tiles.FLOOR
+    engine.game_map.tiles[stairs.x, stairs.y] = tiles.FLOOR
+    depth_before = engine.depth
+
+    engine.handle_player_action(BumpAction(engine.player, 1, 0))
+    assert engine.depth == depth_before + 1
+
+
+def test_noise_cave_has_decorations_and_a_merchant():
+    cfg = replace(config.DEFAULT, noise_map_size=48, merchant_chance=1.0)
+    game_map, _ = generate_noise_dungeon(cfg, Rng(4))
+    kinds = {e.get("decoration").kind for e in game_map.entities if e.get("decoration")}
+    assert {"trash", "water", "box"} <= kinds
+    assert any(e.has("merchant") for e in game_map.entities)
+    # Decorations never block movement.
+    assert all(not e.blocks_movement for e in game_map.entities if e.get("decoration"))
 
 
 def _flood_region(game_map, sx, sy):

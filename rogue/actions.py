@@ -81,19 +81,6 @@ class ScoutAction(Action):
         return ActionResult(advances_turn=True, is_activity=True)
 
 
-class DescendAction(Action):
-    """Activate the down-stairs to move on to a deeper, tougher level."""
-
-    def perform(self, engine: "Engine") -> ActionResult:
-        if not engine.on_stairs():
-            engine.log.add("There are no stairs to descend here.", config.TEXT_DIM)
-            return ActionResult(advances_turn=False)
-        # descend() rebuilds the world and refreshes FOV itself, so the normal
-        # post-action turn processing must not run on the old map.
-        engine.descend()
-        return ActionResult(advances_turn=False)
-
-
 class MoveAction(Action):
     def __init__(self, actor: "Entity", dx: int, dy: int) -> None:
         super().__init__(actor)
@@ -188,7 +175,11 @@ class BumpAction(Action):
         dest_x = self.actor.x + self.dx
         dest_y = self.actor.y + self.dy
         target = engine.game_map.blocking_entity_at(dest_x, dest_y)
-        if target is not None and target.fighter is not None:
-            # Hold position and fight; the auto-attack resolves the damage.
-            return ActionResult(advances_turn=True)
+        if target is not None:
+            if target.has("merchant") and self.actor is engine.player:
+                engine.open_shop(target)  # open the shop instead of a turn
+                return ActionResult(advances_turn=False)
+            if target.fighter is not None:
+                # Hold position and fight; the auto-attack resolves the damage.
+                return ActionResult(advances_turn=True)
         return MoveAction(self.actor, self.dx, self.dy).perform(engine)

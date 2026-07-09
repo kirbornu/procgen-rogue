@@ -11,7 +11,7 @@ import tcod.console
 import tcod.constants
 
 from .. import config
-from ..bonuses import BonusType
+from ..bonuses import UPGRADE_STEP, BonusType, format_bonus
 from ..engine import Engine
 from ..entity import Entity
 from ..world import tiles
@@ -24,6 +24,21 @@ class Renderer:
         self.camera = Camera(cfg.screen_width, cfg.map_view_height)
         self.show_inventory = False
         self.inv_cursor = 0
+        self.shop_cursor = 0
+
+    # --- shop modal state -------------------------------------------------
+    def move_shop_cursor(self, delta: int, engine: Engine) -> None:
+        rows = engine.shop_rows()
+        if not rows:
+            self.shop_cursor = 0
+            return
+        self.shop_cursor = (self.shop_cursor + delta) % len(rows)
+
+    def selected_shop_row(self, engine: Engine):
+        rows = engine.shop_rows()
+        if 0 <= self.shop_cursor < len(rows):
+            return rows[self.shop_cursor]
+        return None
 
     # --- inventory modal state --------------------------------------------
     def open_inventory(self, engine: Engine) -> None:
@@ -54,7 +69,9 @@ class Renderer:
         self._render_status(console, engine)
         self._render_log(console, engine)
         self._render_controls(console)
-        if self.show_inventory:
+        if engine.shop is not None:
+            self._render_shop(console, engine)
+        elif self.show_inventory:
             self._render_inventory(console, engine)
         if engine.game_over:
             self._render_center_banner(console, "You have died.  Press ESC to quit.")
@@ -144,7 +161,6 @@ class Renderer:
         ("s", "wait"),
         ("r", "heal"),
         ("f", "scout"),
-        (">", "descend"),
         ("i", "inventory"),
         ("Esc", "quit"),
     ]
@@ -166,54 +182,123 @@ class Renderer:
     def _render_inventory(self, console: tcod.console.Console, engine: Engine) -> None:
         items = self._inventory_items(engine)
         equipment = engine.player.get("equipment")
-        width, height = 54, 30
+        width, height = 64, 30
+        left_w = 40  # width of the item column; the rest is the character sheet
         x = (self.cfg.screen_width - width) // 2
         y = (self.cfg.screen_height - height) // 2
         console.draw_frame(x, y, width, height, fg=config.TITLE_COLOR, bg=config.BLACK)
         console.print_box(
             x, y, width, 1, " Inventory ", fg=config.TITLE_COLOR, alignment=tcod.constants.CENTER
         )
+        for yy in range(y + 1, y + height - 1):  # column divider
+            console.print(x + left_w, yy, "│", fg=config.TEXT_DIM)
 
-        # Layout rows: title | list | separator | detail block | footer.
+        # Left column: item list | separator | selected-item detail.
         list_top = y + 2
         footer_row = y + height - 2
-        detail_lines = len(BonusType) + 1  # item name + one row per bonus type
+        detail_lines = len(BonusType) + 1
         detail_top = footer_row - detail_lines
         separator_row = detail_top - 1
         list_rows = separator_row - list_top
+        text_w = left_w - 3
 
         if not items:
             console.print(x + 2, list_top, "(empty - kill monsters for loot)", fg=config.TEXT_DIM)
         else:
             self.inv_cursor = max(0, min(self.inv_cursor, len(items) - 1))
             top = max(0, min(self.inv_cursor - list_rows + 1, len(items) - list_rows))
-            top = max(0, top)
             for row, index in enumerate(range(top, min(len(items), top + list_rows))):
                 item = items[index]
                 selected = index == self.inv_cursor
                 equipped = equipment is not None and equipment.is_equipped(item)
-                cursor = ">" if selected else " "
-                mark = "*" if equipped else " "
-                text = f"{cursor}{mark} {item.display_name}"
+                text = f"{'>' if selected else ' '}{'*' if equipped else ' '} {item.display_name}"
                 fg = config.WHITE if selected else item.color
                 bg = config.WALL_DARK_BG if selected else config.BLACK
-                console.print(x + 2, list_top + row, text[: width - 4], fg=fg, bg=bg)
+                console.print(x + 2, list_top + row, text[:text_w], fg=fg, bg=bg)
 
-        # Detail panel for the highlighted item.
-        console.draw_rect(x + 1, separator_row, width - 2, 1, ch=ord("-"), fg=config.TEXT_DIM)
+        console.draw_rect(x + 1, separator_row, left_w - 1, 1, ch=ord("-"), fg=config.TEXT_DIM)
         selected_item = self.selected_item(engine)
         if selected_item is not None:
             equipped = equipment is not None and equipment.is_equipped(selected_item)
             state = "equipped" if equipped else "in pack"
             console.print(
-                x + 2, detail_top, f"{selected_item.name} ({state})", fg=selected_item.color
+                x + 2, detail_top, f"{selected_item.name} ({state})"[:text_w], fg=selected_item.color
             )
             for i, line in enumerate(selected_item.bonus_lines()):
-                console.print(x + 4, detail_top + 1 + i, line, fg=config.TEXT_COLOR)
+                console.print(x + 4, detail_top + 1 + i, line[:text_w], fg=config.TEXT_COLOR)
+
+        # Right column: the character sheet (effective stats).
+        console.print(x + left_w + 2, y + 2, "Character", fg=config.TITLE_COLOR)
+        for i, (label, value) in enumerate(engine.character_sheet()):
+            console.print(x + left_w + 2, y + 4 + i, f"{label:<10}{value}", fg=config.TEXT_COLOR)
 
         console.print(
-            x + 2, footer_row, "j/k move   Enter/e equip   i/Esc close", fg=config.TEXT_DIM
+            x + 2, footer_row, "up/down move  Enter equip  i/Esc close", fg=config.TEXT_DIM
         )
+
+    def _render_shop(self, console: tcod.console.Console, engine: Engine) -> None:
+        rows = engine.shop_rows()
+        self.shop_cursor = max(0, min(self.shop_cursor, max(0, len(rows) - 1)))
+        progress = engine.player.get("progress")
+        gold = progress.gold if progress else 0
+
+        width, height = 60, 34
+        x = (self.cfg.screen_width - width) // 2
+        y = (self.cfg.screen_height - height) // 2
+        console.draw_frame(x, y, width, height, fg=config.MERCHANT_COLOR, bg=config.BLACK)
+        console.print_box(
+            x, y, width, 1, f" Merchant - Gold: {gold} ", fg=config.MERCHANT_COLOR,
+            alignment=tcod.constants.CENTER,
+        )
+
+        num_upgrades = len(BonusType)
+        footer_row = y + height - 2
+
+        # Upgrades section (always fully visible).
+        console.print(x + 2, y + 2, "Buy permanent upgrades:", fg=config.TITLE_COLOR)
+        for i, (kind, btype) in enumerate(rows[:num_upgrades]):
+            cost = engine.upgrade_cost(btype)
+            owned = engine.player.get("upgrades").count(btype)
+            label = f"{format_bonus(btype, UPGRADE_STEP[btype]):<16} {cost:>6}g   owned {owned}"
+            self._shop_line(console, x, y + 3 + i, width, label, i == self.shop_cursor, gold >= cost)
+
+        sep = y + 3 + num_upgrades
+        console.draw_rect(x + 1, sep, width - 2, 1, ch=ord("-"), fg=config.TEXT_DIM)
+        console.print(x + 2, sep, " Sell items ", fg=config.TITLE_COLOR)
+
+        # Sell section (scrolls if the pack is large).
+        sell_top = sep + 1
+        sell_rows = footer_row - sell_top
+        sell_items = rows[num_upgrades:]
+        if not sell_items:
+            console.print(x + 2, sell_top, "(nothing to sell)", fg=config.TEXT_DIM)
+        else:
+            sel = self.shop_cursor - num_upgrades  # -1 if cursor is in upgrades
+            top = 0
+            if sel >= 0:
+                top = max(0, min(sel - sell_rows + 1, len(sell_items) - sell_rows))
+            for r, index in enumerate(range(top, min(len(sell_items), top + sell_rows))):
+                _, item = sell_items[index]
+                price = self.cfg.sell_price_per_level * item.level
+                label = f"{item.display_name:<28} +{price}g"
+                self._shop_line(
+                    console, x, sell_top + r, width, label,
+                    (num_upgrades + index) == self.shop_cursor, True,
+                )
+
+        console.print(
+            x + 2, footer_row, "up/down move  Enter buy/sell  Esc close", fg=config.TEXT_DIM
+        )
+
+    def _shop_line(self, console, x, row, width, text, selected, affordable) -> None:
+        if selected:
+            fg, bg = config.WHITE, config.WALL_DARK_BG
+        elif not affordable:
+            fg, bg = config.TEXT_DIM, config.BLACK
+        else:
+            fg, bg = config.TEXT_COLOR, config.BLACK
+        cursor = ">" if selected else " "
+        console.print(x + 2, row, f"{cursor} {text}"[: width - 3], fg=fg, bg=bg)
 
     def _render_center_banner(self, console: tcod.console.Console, text: str) -> None:
         y = self.cfg.map_view_height // 2

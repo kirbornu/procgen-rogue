@@ -22,6 +22,7 @@ if TYPE_CHECKING:
 class RenderOrder(enum.IntEnum):
     """Higher values are drawn last (on top)."""
 
+    DECORATION = -1
     CORPSE = 0
     ITEM = 1
     ACTOR = 2

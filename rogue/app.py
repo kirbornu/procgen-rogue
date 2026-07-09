@@ -15,7 +15,14 @@ import tcod.event
 from . import config
 from .actions import Action
 from .engine import Engine
-from .input import Command, InvCommand, dispatch, dispatch_inventory
+from .input import (
+    Command,
+    InvCommand,
+    ShopCommand,
+    dispatch,
+    dispatch_inventory,
+    dispatch_shop,
+)
 from .ui.renderer import Renderer
 
 
@@ -40,6 +47,10 @@ def run(seed: Optional[int] = None, cfg: config.Config = config.DEFAULT) -> None
 
             for event in tcod.event.wait():
                 context.convert_event(event)
+
+                if engine.shop is not None:
+                    _handle_shop(event, engine, renderer)
+                    continue
 
                 if renderer.show_inventory:
                     _handle_inventory(event, engine, renderer)
@@ -66,3 +77,22 @@ def _handle_inventory(event: tcod.event.Event, engine: Engine, renderer: Rendere
         item = renderer.selected_item(engine)
         if item is not None:
             engine.toggle_equip(item)
+
+
+def _handle_shop(event: tcod.event.Event, engine: Engine, renderer: Renderer) -> None:
+    command = dispatch_shop(event)
+    if command is ShopCommand.CLOSE:
+        engine.close_shop()
+        renderer.shop_cursor = 0
+    elif command is ShopCommand.UP:
+        renderer.move_shop_cursor(-1, engine)
+    elif command is ShopCommand.DOWN:
+        renderer.move_shop_cursor(1, engine)
+    elif command is ShopCommand.SELECT:
+        row = renderer.selected_shop_row(engine)
+        if row is not None:
+            kind, payload = row
+            if kind == "upgrade":
+                engine.buy_upgrade(payload)
+            else:
+                engine.sell_item(payload)

@@ -9,9 +9,9 @@ so it can be tested head-lessly.
      #####.######
      #..........#
      #..........#
-     #.....g..O.#      @  you       #  wall     O  portal
-     #.......@..#      g  monster    .  floor    >  stairs down
-     #....>......#      %  remains    /  loot (an item)
+     #.,.g.~~.O.#      @  you       #  wall     O  portal    T  merchant
+     #..[]...@..#      g  monster    .  floor    >  stairs    ,  trash
+     #....>..~~..#      %  remains    /  loot     ~  water     []  crate
 ```
 
 ## What's in the box (the brief, implemented)
@@ -27,9 +27,17 @@ so it can be tested head-lessly.
   holds a portal that drops you into the *next* region, far from that region's
   own exit, so you have to cross it. The last region in the chain has **no
   portal**; it holds the down-stairs instead.
-- **Descending** (`>`): at the end of the portal chain the down-stairs take you
-  to a freshly generated, deeper level where monsters are **stronger and more
-  numerous**. Your HP, gold, inventory and equipment carry over.
+- **Descending** (`>`): at the end of the portal chain, **walk onto the
+  down-stairs** to drop to a freshly generated, deeper level where monsters are
+  **stronger and more numerous**. Your HP, gold, inventory and equipment carry
+  over.
+- **Merchant** (`T`, ringed by crates): bump into them to open a shop where you
+  **sell items** (for `100 × level` gold) and **buy permanent stat upgrades** for
+  any of the item stats. Each repeat upgrade of the same stat costs more. A
+  merchant appears on some levels, not all.
+- **Decorations**: cosmetic floor features that block neither movement nor sight
+  (for now) — scattered **trash** (`,`), **water** ponds (`~`, in big clusters)
+  and **crates** (`[]`).
 - **Procedural monsters**: each rolls random HP, attack power, crit and dodge
   chances, and a **speed** (0..1 chance to step toward you each turn, so some
   stand still and some roam). A monster's overall danger sets both its **colour**
@@ -41,13 +49,14 @@ so it can be tested head-lessly.
   auto-attack — **heal** (restore HP) and **scout** (widen your field of view
   until you next move).
 - **Procedural loot**: killing a monster grants gold and drops a generated
-  **item** (level 1–5). Names are built from adjective/noun word lists (higher
-  level → more words, e.g. *"Twisted Whispering Ravenous Runed Cane"*), and each
-  item carries **1–10 random bonuses**: max HP, damage, attack range, view
-  radius, crit chance, dodge chance, heal power.
+  **item** whose level scales with the monster's danger. Names are built from
+  adjective/noun word lists (higher level → more words, e.g. *"Twisted
+  Whispering Ravenous Runed Cane"*), and each item carries several **random
+  bonuses** (more at higher level): max HP, damage, attack range, view radius,
+  crit chance, dodge chance, heal power.
 - **Equipment**: the player can **use only two items at once**; their bonuses
-  add to the effective stats. Everything else just sits in the inventory. Open
-  the inventory to browse items and equip/unequip.
+  add to the effective stats. Everything else just sits in the inventory. The
+  inventory screen also shows your full **character sheet** (all current stats).
 - **Fog of war** with a **radius of 10** tiles; explored areas are remembered
   and drawn dimmed.
 
@@ -68,16 +77,16 @@ python main.py --seed 42  # reproducible dungeon
 
 | Keys | Action |
 |------|--------|
-| Arrow keys · `hjkl` · numpad | Move / bump-attack (8 directions) |
-| `y` `u` `b` `n` | Diagonal moves |
-| `.` · numpad `5` | Wait a turn |
+| Arrow keys · numpad · `Q W E / A D / Z X C` | Move / bump-attack (8 directions) |
+| `s` · `.` · numpad `5` | Wait a turn |
 | `r` | Heal (activity: restore HP) |
-| `s` | Scout (activity: widen view until you move) |
-| `>` | Descend (while standing on the down-stairs) |
+| `f` | Scout (activity: widen view until you move) |
+| walk onto `>` | Descend to the next level |
+| walk into `T` | Open the merchant's shop |
 | `i` | Open / close inventory |
-| `j`/`k` · ↑/↓ | (in inventory) move selection |
-| `Enter` · `e` | (in inventory) equip / unequip selected item |
-| `Esc` · `q` | Quit |
+| ↑/↓ · `w`/`x` | (in inventory / shop) move selection |
+| `Enter` | (inventory) equip/unequip · (shop) buy/sell |
+| `Esc` | Close overlay / quit |
 
 ## Run the tests
 

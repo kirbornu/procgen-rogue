@@ -9,14 +9,17 @@ from __future__ import annotations
 
 from . import config
 from .components import (
+    Decoration,
     Equipment,
     Fighter,
     Inventory,
     Loot,
+    Merchant,
     MonsterAI,
     Progress,
     Stairs,
     Teleport,
+    Upgrades,
 )
 from .entity import Entity, RenderOrder
 from .items import MAX_LEVEL
@@ -51,6 +54,7 @@ def make_player(x: int, y: int, cfg: config.Config) -> Entity:
     )
     player.add("inventory", Inventory(capacity=cfg.inventory_capacity))
     player.add("equipment", Equipment(capacity=cfg.equipment_slots))
+    player.add("upgrades", Upgrades())
     player.add("progress", Progress())
     return player
 
@@ -131,3 +135,40 @@ def make_stairs(x: int, y: int) -> Entity:
     )
     stairs.add("stairs", Stairs())
     return stairs
+
+
+def make_merchant(x: int, y: int) -> Entity:
+    merchant = Entity(
+        x,
+        y,
+        char="T",
+        color=config.MERCHANT_COLOR,
+        name="Merchant",
+        blocks_movement=True,
+        render_order=RenderOrder.ACTOR,
+    )
+    merchant.add("merchant", Merchant())
+    return merchant
+
+
+# Decoration recipes: kind -> (glyph, colour).  Boxes use a two-cell glyph.
+DECORATION_GLYPHS = {
+    "trash": (",", config.TRASH_COLOR),
+    "water": ("~", config.WATER_COLOR),
+    "box": ("[]", config.BOX_COLOR),
+}
+
+
+def make_decoration(kind: str, x: int, y: int) -> Entity:
+    char, color = DECORATION_GLYPHS[kind]
+    deco = Entity(
+        x,
+        y,
+        char=char,
+        color=color,
+        name=kind,
+        blocks_movement=False,
+        render_order=RenderOrder.DECORATION,
+    )
+    deco.add("decoration", Decoration(kind))
+    return deco

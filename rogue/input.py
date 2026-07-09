@@ -12,7 +12,7 @@ from typing import Optional, Union
 
 import tcod.event
 
-from .actions import Action, BumpAction, DescendAction, HealAction, ScoutAction, WaitAction
+from .actions import Action, BumpAction, HealAction, ScoutAction, WaitAction
 from .entity import Entity
 
 K = tcod.event.KeySym
@@ -63,6 +63,15 @@ class InvCommand(enum.Enum):
     CLOSE = enum.auto()
 
 
+class ShopCommand(enum.Enum):
+    """Navigation while the merchant's shop is open."""
+
+    UP = enum.auto()
+    DOWN = enum.auto()
+    SELECT = enum.auto()  # buy the upgrade / sell the item on the cursor
+    CLOSE = enum.auto()
+
+
 Dispatch = Union[Action, Command, None]
 
 
@@ -73,13 +82,9 @@ def dispatch(event: tcod.event.Event, player: Entity) -> Dispatch:
         return None
 
     key = event.sym
-    shift = bool(event.mod & tcod.event.Modifier.SHIFT)
     if key in MOVE_KEYS:
         dx, dy = MOVE_KEYS[key]
         return BumpAction(player, dx, dy)
-    # '>' (either a direct GREATER key or Shift+'.') descends the stairs.
-    if key == K.GREATER or (key == K.PERIOD and shift):
-        return DescendAction(player)
     if key in WAIT_KEYS:
         return WaitAction(player)
     if key == K.R:
@@ -101,12 +106,31 @@ def dispatch_inventory(event: tcod.event.Event) -> Optional[InvCommand]:
         return None
 
     key = event.sym
-    if key in (K.UP, K.K, K.KP_8):
+    if key in (K.UP, K.W, K.K, K.KP_8):
         return InvCommand.UP
-    if key in (K.DOWN, K.J, K.KP_2):
+    if key in (K.DOWN, K.X, K.J, K.KP_2):
         return InvCommand.DOWN
     if key in (K.RETURN, K.KP_ENTER, K.E):
         return InvCommand.EQUIP
     if key in (K.I, K.ESCAPE):
         return InvCommand.CLOSE
+    return None
+
+
+def dispatch_shop(event: tcod.event.Event) -> Optional[ShopCommand]:
+    """Key handling while the merchant's shop is open."""
+    if isinstance(event, tcod.event.Quit):
+        return ShopCommand.CLOSE
+    if not isinstance(event, tcod.event.KeyDown):
+        return None
+
+    key = event.sym
+    if key in (K.UP, K.W, K.K, K.KP_8):
+        return ShopCommand.UP
+    if key in (K.DOWN, K.X, K.J, K.KP_2):
+        return ShopCommand.DOWN
+    if key in (K.RETURN, K.KP_ENTER, K.SPACE):
+        return ShopCommand.SELECT
+    if key in (K.ESCAPE,):
+        return ShopCommand.CLOSE
     return None

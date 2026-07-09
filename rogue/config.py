@@ -26,6 +26,10 @@ CORPSE_COLOR = (0x9E, 0x2A, 0x2A)
 ITEM_COLOR = (0xC8, 0xA8, 0x50)
 TELEPORT_COLOR = (0x50, 0xE0, 0xE0)
 STAIRS_COLOR = (0xF0, 0xE0, 0x50)
+MERCHANT_COLOR = (0xF0, 0xD0, 0x40)
+TRASH_COLOR = (0x55, 0x50, 0x45)
+WATER_COLOR = (0x40, 0x70, 0xB0)
+BOX_COLOR = (0x9A, 0x6E, 0x3A)
 
 HP_BAR_FILLED = (0x30, 0x80, 0x30)
 HP_BAR_EMPTY = (0x60, 0x18, 0x18)
@@ -82,6 +86,18 @@ class Config:
     # Loot: sticks come in tiers 1..5; lower tiers are more common.
     loot_tier_weights: tuple[int, ...] = (40, 26, 18, 11, 5)
     reward_gold_per_tier: int = 10
+
+    # Economy: the merchant.
+    sell_price_per_level: int = 100  # an item sells for this * its level
+    upgrade_cost_growth: float = 1.6  # each repeat upgrade of a stat costs x this
+    merchant_chance: float = 0.6  # probability a level has a merchant
+    merchant_box_count: int = 12  # crates clustered around the merchant
+
+    # Decorations (cosmetic for now; may gain effects later).
+    trash_fraction: float = 0.03  # share of floor tiles littered with ','
+    water_clusters: int = 4  # number of '~' ponds
+    water_cluster_size: int = 40  # target cells per pond
+    box_count: int = 14  # scattered '[]' crates across the level
 
     @property
     def status_row(self) -> int:

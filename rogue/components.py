@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import List, Optional, TYPE_CHECKING
 
 from . import config
-from .bonuses import BonusType
+from .bonuses import UPGRADE_STEP, BonusType
 from .items import Item
 
 if TYPE_CHECKING:
@@ -51,8 +51,16 @@ class Fighter(Component):
 
     def _bonus(self, btype: BonusType) -> float:
         entity = getattr(self, "entity", None)
-        equipment = entity.get("equipment") if entity is not None else None
-        return equipment.total(btype) if equipment is not None else 0
+        if entity is None:
+            return 0
+        total = 0.0
+        equipment = entity.get("equipment")
+        if equipment is not None:
+            total += equipment.total(btype)
+        upgrades = entity.get("upgrades")
+        if upgrades is not None:
+            total += upgrades.total(btype)
+        return total
 
     @property
     def max_hp(self) -> int:
@@ -227,3 +235,42 @@ class Progress(Component):
     def __init__(self) -> None:
         self.gold = 0
         self.kills = 0
+
+
+class Upgrades(Component):
+    """Permanent stat boosts bought from a merchant.
+
+    Stored as a purchase count per bonus type; the effective bonus is the count
+    times the per-stat step.  ``Fighter`` and the engine fold this in exactly like
+    equipment, so upgrades and gear stack.
+    """
+
+    def __init__(self) -> None:
+        self.counts: dict[BonusType, int] = {}
+
+    def count(self, btype: BonusType) -> int:
+        return self.counts.get(btype, 0)
+
+    def total(self, btype: BonusType) -> float:
+        return self.counts.get(btype, 0) * UPGRADE_STEP[btype]
+
+    def buy(self, btype: BonusType) -> None:
+        self.counts[btype] = self.counts.get(btype, 0) + 1
+        entity = getattr(self, "entity", None)
+        if entity is not None and entity.fighter is not None:
+            entity.fighter.clamp_hp()  # a Max-HP upgrade widened the cap
+
+
+class Merchant(Component):
+    """Marks a trader you can bump into to open the shop."""
+
+
+class Decoration(Component):
+    """A cosmetic feature on the floor (trash, water, a crate, ...).
+
+    ``kind`` is a free-form tag; decorations block neither movement nor sight for
+    now, but the component is the hook for giving them effects later.
+    """
+
+    def __init__(self, kind: str) -> None:
+        self.kind = kind
