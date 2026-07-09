@@ -105,12 +105,11 @@ class Engine:
 
     # --- portals & descending ---------------------------------------------
     def _maybe_teleport(self) -> None:
-        """If the player stepped onto a portal, warp to its linked portal."""
+        """If the player stepped onto a portal, warp to its destination cell."""
         for entity in self.game_map.entities_at(self.player.x, self.player.y):
             portal = entity.get("teleport")
-            if portal is not None and portal.target is not None:
-                self.player.x = portal.target.x
-                self.player.y = portal.target.y
+            if portal is not None and portal.dest is not None:
+                self.player.x, self.player.y = portal.dest
                 self.scouting = False
                 self.log.add("You step through a shimmering portal.", config.TELEPORT_COLOR)
                 return

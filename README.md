@@ -23,12 +23,13 @@ so it can be tested head-lessly.
   is above `0.4`, floor otherwise. (A classic rooms-and-corridors generator is
   still bundled and used by the tests.)
 - **Portals** (`O`): the noise splits the floor into disconnected regions, so
-  each region gets one portal and the portals are wired into a single **closed
-  cycle** — step on a portal to jump to the next region's portal, making the
-  whole map traversable.
-- **Descending** (`>`): the down-stairs take you to a freshly generated, deeper
-  level where monsters are **stronger and more numerous**. Your HP, gold,
-  inventory and equipment carry over.
+  the big-enough regions are strung into a random **one-way chain** — each region
+  holds a portal that drops you into the *next* region, far from that region's
+  own exit, so you have to cross it. The last region in the chain has **no
+  portal**; it holds the down-stairs instead.
+- **Descending** (`>`): at the end of the portal chain the down-stairs take you
+  to a freshly generated, deeper level where monsters are **stronger and more
+  numerous**. Your HP, gold, inventory and equipment carry over.
 - **Procedural monsters**: each rolls random HP, attack power, crit and dodge
   chances, and a **speed** (0..1 chance to step toward you each turn, so some
   stand still and some roam). A monster's overall danger sets both its **colour**

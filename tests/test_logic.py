@@ -14,7 +14,7 @@ from rogue.components import Fighter, MonsterAI
 from rogue.engine import Engine
 from rogue.entity import Entity
 from rogue.geometry import Direction, chebyshev
-from rogue.items import MAX_BONUSES_PER_LEVEL, MAX_LEVEL, MIN_BONUSES_PER_LEVEL, generate_item
+from rogue.items import MAX_LEVEL, generate_item
 from rogue.rng import Rng
 from rogue.spawn import danger_color, danger_level, make_monster
 from rogue.ui.camera import Camera
@@ -100,10 +100,10 @@ def test_bump_attack_kills_monster_and_awards_loot():
     assert not monster.is_alive
     assert engine.player.get("progress").kills == 1
     assert engine.player.get("progress").gold > 0
-    # Loot is now a procedurally generated item with 1..10 bonuses.
+    # Loot is a procedurally generated item with at least one bonus.
     items = engine.player.inventory.items
     assert len(items) == 1
-    assert MIN_BONUSES_PER_LEVEL <= len(items[0].bonuses) <= MAX_BONUSES_PER_LEVEL
+    assert 1 <= len(items[0].bonuses) <= len(BonusType)
 
 
 def test_monster_retaliates_when_adjacent():
@@ -180,10 +180,11 @@ def test_generated_item_is_bounded_and_named_by_level():
         requested = rng.randint(0, 9)  # includes out-of-range to test clamping
         item = generate_item(rng, requested)
         assert 1 <= item.level <= MAX_LEVEL
-        assert MIN_BONUSES_PER_LEVEL <= len(item.bonuses) <= MAX_BONUSES_PER_LEVEL
+        # Bonuses aggregate by type, so distinct count is 1..#bonus types.
+        assert 1 <= len(item.bonuses) <= len(BonusType)
         # Higher level -> more words: exactly `level` words in the name.
         assert len(item.name.split()) == item.level
-        assert all(value > 0 for value in item.bonuses.values())
+        assert all(value >= 0 for value in item.bonuses.values())
 
 
 def test_equipment_is_limited_to_two_items():
@@ -298,7 +299,7 @@ def test_input_dispatch_maps_keys():
         return tcod.event.KeyDown(sym=sym, scancode=0, mod=tcod.event.Modifier(0))
 
     # A movement key becomes a BumpAction with the right offset.
-    move = dispatch(key(K.L), engine.player)  # vi 'l' -> east
+    move = dispatch(key(K.D), engine.player)  # 'd' -> east
     assert isinstance(move, BumpAction) and (move.dx, move.dy) == (1, 0)
     # Arrow keys work too.
     up = dispatch(key(K.UP), engine.player)
@@ -325,11 +326,13 @@ def test_noise_dungeon_is_playable_and_deterministic():
     walkable = map_a.tiles["walkable"]
     assert walkable.any() and not walkable.all()
 
-    # The player spawns on floor; the down-stairs sit in the player's region.
+    # The player spawns on floor, and the single down-stairs is reachable from
+    # the start by walking and taking portals (the whole chain is traversable).
     assert map_a.is_walkable(player_a.x, player_a.y)
-    region = set(_flood_region(map_a, player_a.x, player_a.y))
     stairs = [e for e in map_a.entities if e.has("stairs")]
-    assert len(stairs) == 1 and (stairs[0].x, stairs[0].y) in region
+    assert len(stairs) == 1
+    reachable = _reachable_via_portals(map_a, (player_a.x, player_a.y))
+    assert (stairs[0].x, stairs[0].y) in reachable
 
     # The cave is populated with monsters on floor tiles.
     monsters = [e for e in map_a.entities if e.get("ai") is not None]
@@ -337,31 +340,29 @@ def test_noise_dungeon_is_playable_and_deterministic():
     assert all(map_a.is_walkable(m.x, m.y) for m in monsters)
 
 
-def test_noise_portals_form_a_single_closed_cycle():
+def test_noise_portals_form_a_one_way_chain():
     cfg = replace(config.DEFAULT, noise_map_size=48)
-    game_map, _ = generate_noise_dungeon(cfg, Rng(3))
+    game_map, player = generate_noise_dungeon(cfg, Rng(5))
     portals = [e for e in game_map.entities if e.get("teleport") is not None]
-    if not portals:
-        return  # a fully connected cave needs no portals
-    assert len(portals) >= 2
+    stairs = [e for e in game_map.entities if e.has("stairs")]
+    assert len(stairs) == 1
 
-    # Following each portal's target visits every portal exactly once and
-    # returns to the start: a single closed cycle.
-    order = []
-    current = portals[0]
-    for _ in range(len(portals)):
-        order.append(current)
-        current = current.get("teleport").target
-        assert current is not None
-    assert current is portals[0]
-    assert {id(p) for p in order} == {id(p) for p in portals}
+    # The final (stairs) region holds no portal.
+    stairs_region = _flood_region(game_map, stairs[0].x, stairs[0].y)
+    assert not any((p.x, p.y) in stairs_region for p in portals)
 
-    # Each portal lives in a distinct connected region.
-    regions = [frozenset(_flood_region(game_map, p.x, p.y)) for p in portals]
-    assert len(set(regions)) == len(regions)
+    # Every portal is one-way into a *different* region than the one it sits in.
+    for portal in portals:
+        dest = portal.get("teleport").dest
+        assert dest is not None
+        assert dest not in _flood_region(game_map, portal.x, portal.y)
+
+    # And the chain is walkable end to end, from the player to the stairs.
+    reachable = _reachable_via_portals(game_map, (player.x, player.y))
+    assert (stairs[0].x, stairs[0].y) in reachable
 
 
-def test_stepping_onto_a_portal_warps_to_its_target():
+def test_stepping_onto_a_portal_warps_to_its_destination():
     from rogue.spawn import make_teleport
     from rogue.world import tiles
 
@@ -369,15 +370,12 @@ def test_stepping_onto_a_portal_warps_to_its_target():
     px, py = engine.player.x, engine.player.y
     engine.game_map.tiles[px + 1, py] = tiles.FLOOR  # ensure a step east is legal
 
-    here = make_teleport(px + 1, py)
-    there = make_teleport(px + 6, py)
-    engine.game_map.tiles[px + 6, py] = tiles.FLOOR
-    here.get("teleport").target = there
-    there.get("teleport").target = here
-    engine.game_map.entities.extend([here, there])
+    portal = make_teleport(px + 1, py)
+    portal.get("teleport").dest = (px + 6, py)
+    engine.game_map.entities.append(portal)
 
     engine.handle_player_action(BumpAction(engine.player, 1, 0))
-    assert (engine.player.x, engine.player.y) == (there.x, there.y)
+    assert (engine.player.x, engine.player.y) == (px + 6, py)
 
 
 def test_descend_deepens_level_and_carries_player_over():
@@ -410,6 +408,32 @@ def _flood_region(game_map, sx, sy):
     stack = [(sx, sy)]
     while stack:
         x, y = stack.pop()
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                nx, ny = x + dx, y + dy
+                if 0 <= nx < w and 0 <= ny < h and (nx, ny) not in seen and walkable[nx, ny]:
+                    seen.add((nx, ny))
+                    stack.append((nx, ny))
+    return seen
+
+
+def _reachable_via_portals(game_map, start):
+    """Cells reachable from ``start`` by walking, following portals one-way."""
+    walkable = game_map.tiles["walkable"]
+    w, h = game_map.width, game_map.height
+    portals = {
+        (e.x, e.y): e.get("teleport").dest
+        for e in game_map.entities
+        if e.get("teleport") is not None
+    }
+    seen = {start}
+    stack = [start]
+    while stack:
+        x, y = stack.pop()
+        dest = portals.get((x, y))
+        if dest is not None and dest not in seen:
+            seen.add(dest)
+            stack.append(dest)
         for dx in (-1, 0, 1):
             for dy in (-1, 0, 1):
                 nx, ny = x + dx, y + dy

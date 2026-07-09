@@ -206,14 +206,14 @@ class Loot(Component):
 
 
 class Teleport(Component):
-    """A portal that, when stepped on, sends the player to its linked portal.
+    """A one-way portal: stepping on it warps the player to ``dest``.
 
-    ``target`` is another teleport entity; the generator wires every region's
-    portal into one closed cycle so the whole map is traversable.
+    ``dest`` is an ``(x, y)`` cell in the *next* region of the chain, chosen far
+    from that region's own portal so the player has to cross it to move on.
     """
 
-    def __init__(self) -> None:
-        self.target: Optional["Entity"] = None
+    def __init__(self, dest: Optional[tuple] = None) -> None:
+        self.dest: Optional[tuple] = dest
 
 
 class Stairs(Component):
