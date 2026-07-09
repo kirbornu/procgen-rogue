@@ -29,6 +29,7 @@ class Renderer:
         self._render_entities(console, engine)
         self._render_status(console, engine)
         self._render_log(console, engine)
+        self._render_controls(console)
         if self.show_inventory:
             self._render_inventory(console, engine)
         if engine.game_over:
@@ -102,9 +103,34 @@ class Renderer:
 
     def _render_log(self, console: tcod.console.Console, engine: Engine) -> None:
         first_row = self.cfg.log_row
-        rows = self.cfg.screen_height - first_row
+        rows = self.cfg.controls_row - first_row  # leave the last row for hints
         for i, message in enumerate(engine.log.last(rows)):
             console.print(1, first_row + i, message.full_text[: self.cfg.screen_width - 2], fg=message.color)
+
+    #: Always-on key hints, drawn along the bottom row.  Keeping the list here
+    #: (paired key -> label) makes it the single place to update when bindings
+    #: in ``input.py`` change.
+    CONTROL_HINTS = [
+        ("move", "arrows/hjkl"),
+        (".", "wait"),
+        ("r", "heal"),
+        ("s", "scout"),
+        ("i", "inventory"),
+        ("q", "quit"),
+    ]
+
+    def _render_controls(self, console: tcod.console.Console) -> None:
+        row = self.cfg.controls_row
+        # A subtle bar so the hints read as a separate strip.
+        console.draw_rect(0, row, self.cfg.screen_width, 1, ch=ord(" "), bg=config.WALL_DARK_BG)
+        x = 1
+        for key, label in self.CONTROL_HINTS:
+            console.print(x, row, key, fg=config.TITLE_COLOR, bg=config.WALL_DARK_BG)
+            x += len(key) + 1
+            console.print(x, row, label, fg=config.TEXT_DIM, bg=config.WALL_DARK_BG)
+            x += len(label) + 2
+            if x >= self.cfg.screen_width:
+                break
 
     # --- overlays ----------------------------------------------------------
     def _render_inventory(self, console: tcod.console.Console, engine: Engine) -> None:

@@ -82,5 +82,10 @@ class Config:
         """First row of the scrolling message log."""
         return self.map_view_height + 1
 
+    @property
+    def controls_row(self) -> int:
+        """Bottom row reserved for the always-on key-hint bar."""
+        return self.screen_height - 1
+
 
 DEFAULT = Config()
