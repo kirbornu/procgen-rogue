@@ -205,6 +205,22 @@ class Loot(Component):
         self.level = level
 
 
+class Teleport(Component):
+    """A portal that, when stepped on, sends the player to its linked portal.
+
+    ``target`` is another teleport entity; the generator wires every region's
+    portal into one closed cycle so the whole map is traversable.
+    """
+
+    def __init__(self) -> None:
+        self.target: Optional["Entity"] = None
+
+
+class Stairs(Component):
+    """Marks the down-stairs: activating them descends to a deeper level."""
+
+
+
 class Progress(Component):
     """Player-side progression: gold and kill count (easy to extend to XP)."""
 

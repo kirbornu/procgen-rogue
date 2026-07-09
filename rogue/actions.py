@@ -81,6 +81,19 @@ class ScoutAction(Action):
         return ActionResult(advances_turn=True, is_activity=True)
 
 
+class DescendAction(Action):
+    """Activate the down-stairs to move on to a deeper, tougher level."""
+
+    def perform(self, engine: "Engine") -> ActionResult:
+        if not engine.on_stairs():
+            engine.log.add("There are no stairs to descend here.", config.TEXT_DIM)
+            return ActionResult(advances_turn=False)
+        # descend() rebuilds the world and refreshes FOV itself, so the normal
+        # post-action turn processing must not run on the old map.
+        engine.descend()
+        return ActionResult(advances_turn=False)
+
+
 class MoveAction(Action):
     def __init__(self, actor: "Entity", dx: int, dy: int) -> None:
         super().__init__(actor)

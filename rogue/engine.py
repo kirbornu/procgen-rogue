@@ -33,10 +33,11 @@ class Engine:
         #: While True the FOV radius is boosted; cleared as soon as the player moves.
         self.scouting = False
 
-        # ``generator(cfg, rng) -> (GameMap, player)``; defaults to the noise
-        # cave.  Tests inject the faster room generator.
-        generate = generator or generate_noise_dungeon
-        self.game_map, self.player = generate(cfg, self.rng)
+        # ``generator(cfg, rng, depth, player) -> (GameMap, player)``; defaults
+        # to the noise cave.  Tests inject the faster room generator.
+        self._generator = generator or generate_noise_dungeon
+        self.depth = 1
+        self.game_map, self.player = self._generator(cfg, self.rng, depth=self.depth)
         self.update_fov()
         self.log.add("You descend into the dungeon.", config.TITLE_COLOR)
 
@@ -55,9 +56,10 @@ class Engine:
         if not result.advances_turn:
             return
 
-        # Relocating cancels the scouting FOV bonus.
+        # Relocating cancels the scouting FOV bonus and may step onto a portal.
         if (self.player.x, self.player.y) != before:
             self.scouting = False
+            self._maybe_teleport()
 
         # Auto-attack fires on ordinary turns (moving/waiting) but not while the
         # player is occupied with an activity such as healing or scouting.
@@ -100,6 +102,34 @@ class Engine:
         if self.scouting:
             radius += self.cfg.scout_fov_bonus
         self.game_map.compute_fov(self.player.x, self.player.y, radius)
+
+    # --- portals & descending ---------------------------------------------
+    def _maybe_teleport(self) -> None:
+        """If the player stepped onto a portal, warp to its linked portal."""
+        for entity in self.game_map.entities_at(self.player.x, self.player.y):
+            portal = entity.get("teleport")
+            if portal is not None and portal.target is not None:
+                self.player.x = portal.target.x
+                self.player.y = portal.target.y
+                self.scouting = False
+                self.log.add("You step through a shimmering portal.", config.TELEPORT_COLOR)
+                return
+
+    def on_stairs(self) -> bool:
+        return any(e.has("stairs") for e in self.game_map.entities_at(self.player.x, self.player.y))
+
+    def descend(self) -> None:
+        """Regenerate a deeper, tougher level, carrying the player over."""
+        self.depth += 1
+        self.game_map, self.player = self._generator(
+            self.cfg, self.rng, depth=self.depth, player=self.player
+        )
+        self.scouting = False
+        self.update_fov()
+        self.log.add(
+            f"You descend to depth {self.depth}. The monsters here are stronger.",
+            config.TITLE_COLOR,
+        )
 
     # --- equipment-derived player values -----------------------------------
     def _equipment_bonus(self, btype: BonusType) -> float:

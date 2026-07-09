@@ -8,7 +8,16 @@ downstream needs to change.
 from __future__ import annotations
 
 from . import config
-from .components import Equipment, Fighter, Inventory, Loot, MonsterAI, Progress
+from .components import (
+    Equipment,
+    Fighter,
+    Inventory,
+    Loot,
+    MonsterAI,
+    Progress,
+    Stairs,
+    Teleport,
+)
 from .entity import Entity, RenderOrder
 from .items import MAX_LEVEL
 from .rng import Rng
@@ -93,3 +102,31 @@ def make_monster(rng: Rng, x: int, y: int, depth: int = 1) -> Entity:
     monster.add("ai", MonsterAI(speed=speed))
     monster.add("loot", Loot(level=level))
     return monster
+
+
+def make_teleport(x: int, y: int) -> Entity:
+    portal = Entity(
+        x,
+        y,
+        char="O",
+        color=config.TELEPORT_COLOR,
+        name="portal",
+        blocks_movement=False,
+        render_order=RenderOrder.ITEM,
+    )
+    portal.add("teleport", Teleport())
+    return portal
+
+
+def make_stairs(x: int, y: int) -> Entity:
+    stairs = Entity(
+        x,
+        y,
+        char=">",
+        color=config.STAIRS_COLOR,
+        name="stairs down",
+        blocks_movement=False,
+        render_order=RenderOrder.ITEM,
+    )
+    stairs.add("stairs", Stairs())
+    return stairs

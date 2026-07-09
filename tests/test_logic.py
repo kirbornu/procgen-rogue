@@ -325,13 +325,81 @@ def test_noise_dungeon_is_playable_and_deterministic():
     walkable = map_a.tiles["walkable"]
     assert walkable.any() and not walkable.all()
 
-    # The player spawns on floor, and every monster shares the player's
-    # connected region (so nothing is walled off from the fight).
+    # The player spawns on floor; the down-stairs sit in the player's region.
     assert map_a.is_walkable(player_a.x, player_a.y)
     region = set(_flood_region(map_a, player_a.x, player_a.y))
-    monsters = [e for e in map_a.entities if e is not player_a]
-    assert monsters, "expected the cave to be populated"
-    assert all((m.x, m.y) in region for m in monsters)
+    stairs = [e for e in map_a.entities if e.has("stairs")]
+    assert len(stairs) == 1 and (stairs[0].x, stairs[0].y) in region
+
+    # The cave is populated with monsters on floor tiles.
+    monsters = [e for e in map_a.entities if e.get("ai") is not None]
+    assert monsters
+    assert all(map_a.is_walkable(m.x, m.y) for m in monsters)
+
+
+def test_noise_portals_form_a_single_closed_cycle():
+    cfg = replace(config.DEFAULT, noise_map_size=48)
+    game_map, _ = generate_noise_dungeon(cfg, Rng(3))
+    portals = [e for e in game_map.entities if e.get("teleport") is not None]
+    if not portals:
+        return  # a fully connected cave needs no portals
+    assert len(portals) >= 2
+
+    # Following each portal's target visits every portal exactly once and
+    # returns to the start: a single closed cycle.
+    order = []
+    current = portals[0]
+    for _ in range(len(portals)):
+        order.append(current)
+        current = current.get("teleport").target
+        assert current is not None
+    assert current is portals[0]
+    assert {id(p) for p in order} == {id(p) for p in portals}
+
+    # Each portal lives in a distinct connected region.
+    regions = [frozenset(_flood_region(game_map, p.x, p.y)) for p in portals]
+    assert len(set(regions)) == len(regions)
+
+
+def test_stepping_onto_a_portal_warps_to_its_target():
+    from rogue.spawn import make_teleport
+    from rogue.world import tiles
+
+    engine = make_engine(seed=1)
+    px, py = engine.player.x, engine.player.y
+    engine.game_map.tiles[px + 1, py] = tiles.FLOOR  # ensure a step east is legal
+
+    here = make_teleport(px + 1, py)
+    there = make_teleport(px + 6, py)
+    engine.game_map.tiles[px + 6, py] = tiles.FLOOR
+    here.get("teleport").target = there
+    there.get("teleport").target = here
+    engine.game_map.entities.extend([here, there])
+
+    engine.handle_player_action(BumpAction(engine.player, 1, 0))
+    assert (engine.player.x, engine.player.y) == (there.x, there.y)
+
+
+def test_descend_deepens_level_and_carries_player_over():
+    engine = make_engine(seed=1)
+    player = engine.player
+    player.inventory.add(generate_item(engine.rng, 2))
+    player.fighter.hp = 7
+    items_before = len(player.inventory.items)
+
+    engine.descend()
+
+    assert engine.depth == 2
+    assert engine.player is player  # same entity, so stats/inventory persist
+    assert len(engine.player.inventory.items) == items_before
+    assert engine.player.fighter.hp == 7
+
+
+def test_deeper_monsters_are_tougher():
+    rng = Rng(5)
+    shallow = [make_monster(rng, 0, 0, depth=1).fighter.base_max_hp for _ in range(60)]
+    deep = [make_monster(rng, 0, 0, depth=6).fighter.base_max_hp for _ in range(60)]
+    assert sum(deep) / len(deep) > sum(shallow) / len(shallow)
 
 
 def _flood_region(game_map, sx, sy):

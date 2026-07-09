@@ -108,7 +108,7 @@ class Renderer:
         equipment = engine.player.get("equipment")
         using = f"{len(equipment.equipped)}/{equipment.capacity}" if equipment else "0/0"
         stats = (
-            f" Gold {progress.gold}   Kills {progress.kills}"
+            f" Depth {engine.depth}   Gold {progress.gold}   Kills {progress.kills}"
             f"   Items {len(inventory.items)}   Using {using}"
         )
         console.print(1 + bar_width + 1, row, stats, fg=config.TEXT_COLOR)
@@ -144,6 +144,7 @@ class Renderer:
         (".", "wait"),
         ("r", "heal"),
         ("s", "scout"),
+        (">", "descend"),
         ("i", "inventory"),
         ("q", "quit"),
     ]
