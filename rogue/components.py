@@ -26,11 +26,12 @@ class Component:
 class Fighter(Component):
     """Hit points and the raw stats melee resolves against."""
 
-    def __init__(self, hp: int, power: int, defense: int) -> None:
+    def __init__(self, hp: int, power: int, defense: int, attack_range: int = 1) -> None:
         self.max_hp = hp
         self._hp = hp
         self.power = power
         self.defense = defense
+        self.attack_range = attack_range  # Chebyshev reach for auto-attack
 
     @property
     def hp(self) -> int:

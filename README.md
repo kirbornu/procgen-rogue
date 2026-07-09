@@ -20,7 +20,12 @@ so it can be tested head-lessly.
 - **One player** (`@`) with a **camera that follows** and scrolls the map.
 - **Procedural dungeon**: simple square rooms joined by right-angle corridors.
 - **Monsters** (`g`) that just stand and **trade blows when you get adjacent**.
-- **Bump to attack**: walk into a monster to hit it; it hits back on its turn.
+- **Attack radius + auto-attack**: any enemy within the player's attack range is
+  struck automatically each turn - unless the player spends the turn on an
+  *activity*. Moving and waiting are not activities, so you fight while doing them.
+- **Activities**: deliberate turns that occupy the player and suppress the
+  auto-attack — **heal** (restore HP) and **scout** (widen your field of view
+  until you next move).
 - **Rewards + loot**: killing a monster grants gold and drops a **stick** into
   your inventory. Sticks come in **tiers 1–5** (rarer at higher tiers).
 - **Fog of war** with a **radius of 10** tiles; explored areas are remembered
@@ -46,6 +51,8 @@ python main.py --seed 42  # reproducible dungeon
 | Arrow keys · `hjkl` · numpad | Move / bump-attack (8 directions) |
 | `y` `u` `b` `n` | Diagonal moves |
 | `.` · numpad `5` | Wait a turn |
+| `r` | Heal (activity: restore HP) |
+| `s` | Scout (activity: widen view until you move) |
 | `i` | Toggle inventory |
 | `Esc` · `q` | Quit |
 
@@ -98,7 +105,9 @@ Some concrete "next ideas" and where they go:
 - **New loot / equipment** — add an `ItemKind` in `items.py` and (optionally) a
   roll table. Inventory, combat and rendering already treat items generically.
 - **New player verb** (throw, quaff, open door) — a new `Action` subclass plus a
-  key binding in `input.py`.
+  key binding in `input.py`. Return `is_activity=True` from its `ActionResult`
+  to make it an *activity* (occupies the player, suppresses the auto-attack),
+  the same pattern `HealAction` and `ScoutAction` use.
 - **New terrain** (water, lava, doors) — one `new_tile(...)` call in `tiles.py`;
   FOV and rendering pick it up automatically.
 - **Different map styles** (caves, BSP, vaults) — a sibling module to

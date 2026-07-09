@@ -5,8 +5,10 @@ They double as executable documentation of how the systems fit together.
 """
 from __future__ import annotations
 
+from dataclasses import replace
+
 from rogue import config
-from rogue.actions import BumpAction, MoveAction, WaitAction
+from rogue.actions import BumpAction, HealAction, MoveAction, ScoutAction, WaitAction
 from rogue.engine import Engine
 from rogue.geometry import Direction, chebyshev
 from rogue.items import make_stick, roll_loot
@@ -81,6 +83,74 @@ def test_monster_retaliates_when_adjacent():
     # Waiting next to a live monster should let it hit back.
     engine.handle_player_action(WaitAction(engine.player))
     assert engine.player.fighter.hp < start_hp
+
+
+def _adjacent_monster(engine):
+    """Drop a monster right next to the player and return it."""
+    monster = make_monster(engine.player.x + 1, engine.player.y)
+    engine.game_map.entities.append(monster)
+    return monster
+
+
+def test_auto_attack_strikes_enemy_in_range_on_wait():
+    engine = Engine(seed=1)
+    monster = _adjacent_monster(engine)
+    before = monster.fighter.hp
+    # Waiting is not an activity, so the auto-attack fires.
+    engine.handle_player_action(WaitAction(engine.player))
+    assert monster.fighter.hp < before
+
+
+def test_heal_restores_hp():
+    engine = Engine(seed=1)  # player starts alone in the first room
+    engine.player.fighter.hp = 5
+    engine.handle_player_action(HealAction(engine.player))
+    assert engine.player.fighter.hp == 5 + config.DEFAULT.heal_amount
+
+
+def test_activity_suppresses_auto_attack():
+    engine = Engine(seed=1)
+    monster = _adjacent_monster(engine)
+    before = monster.fighter.hp
+    # Healing is an activity, so the player does not auto-attack this turn.
+    engine.handle_player_action(HealAction(engine.player))
+    assert monster.fighter.hp == before
+
+
+def test_scouting_boosts_fov_and_clears_on_move():
+    engine = Engine(seed=3)
+    engine.scouting = False
+    engine.update_fov()
+    base = int(engine.game_map.visible.sum())
+    engine.scouting = True
+    engine.update_fov()
+    assert int(engine.game_map.visible.sum()) >= base
+
+    # Performing the scout activity sets the state...
+    engine = Engine(seed=3)
+    engine.handle_player_action(ScoutAction(engine.player))
+    assert engine.scouting is True
+
+    # ...and moving to a new tile clears it.
+    moved = False
+    for dx, dy in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
+        nx, ny = engine.player.x + dx, engine.player.y + dy
+        if engine.game_map.is_walkable(nx, ny) and engine.game_map.blocking_entity_at(nx, ny) is None:
+            engine.handle_player_action(BumpAction(engine.player, dx, dy))
+            moved = True
+            break
+    assert moved and engine.scouting is False
+
+
+def test_attack_range_reaches_beyond_adjacent():
+    cfg = replace(config.DEFAULT, player_attack_range=2)
+    engine = Engine(cfg=cfg, seed=1)
+    # Enemy two tiles away: out of a range-1 reach, in range for this config.
+    monster = make_monster(engine.player.x + 2, engine.player.y)
+    engine.game_map.entities.append(monster)
+    before = monster.fighter.hp
+    engine.handle_player_action(WaitAction(engine.player))
+    assert monster.fighter.hp < before
 
 
 def test_loot_tiers_are_bounded():

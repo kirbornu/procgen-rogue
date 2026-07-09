@@ -21,7 +21,15 @@ def make_player(x: int, y: int, cfg: config.Config) -> Entity:
         blocks_movement=True,
         render_order=RenderOrder.PLAYER,
     )
-    player.add("fighter", Fighter(hp=cfg.player_hp, power=cfg.player_power, defense=cfg.player_defense))
+    player.add(
+        "fighter",
+        Fighter(
+            hp=cfg.player_hp,
+            power=cfg.player_power,
+            defense=cfg.player_defense,
+            attack_range=cfg.player_attack_range,
+        ),
+    )
     player.add("inventory", Inventory(capacity=cfg.inventory_capacity))
     player.add("progress", Progress())
     return player
