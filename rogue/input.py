@@ -12,7 +12,7 @@ from typing import Optional, Union
 
 import tcod.event
 
-from .actions import Action, BumpAction, WaitAction
+from .actions import Action, BumpAction, HealAction, ScoutAction, WaitAction
 from .entity import Entity
 
 K = tcod.event.KeySym
@@ -69,6 +69,10 @@ def dispatch(event: tcod.event.Event, player: Entity) -> Dispatch:
         return BumpAction(player, dx, dy)
     if key in WAIT_KEYS:
         return WaitAction(player)
+    if key == K.R:
+        return HealAction(player)  # rest / heal (an activity)
+    if key == K.S:
+        return ScoutAction(player)  # scout (an activity)
     if key == K.I:
         return Command.TOGGLE_INVENTORY
     if key in (K.ESCAPE, K.Q):

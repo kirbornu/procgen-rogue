@@ -61,7 +61,12 @@ class Config:
     player_hp: int = 30
     player_power: int = 5
     player_defense: int = 2
+    player_attack_range: int = 1  # auto-attack reach, in tiles (Chebyshev)
     inventory_capacity: int = 64
+
+    # Activities (deliberate turns that suppress the auto-attack).
+    heal_amount: int = 1  # HP restored per "heal" activity
+    scout_fov_bonus: int = 6  # extra FOV radius while scouting, until you move
 
     # Loot: sticks come in tiers 1..5; lower tiers are more common.
     loot_tier_weights: tuple[int, ...] = (40, 26, 18, 11, 5)

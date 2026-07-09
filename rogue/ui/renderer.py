@@ -82,6 +82,8 @@ class Renderer:
 
         stats = f" Gold {progress.gold}   Kills {progress.kills}   Sticks {len(inventory.items)}"
         console.print(1 + bar_width + 1, row, stats, fg=config.TEXT_COLOR)
+        if engine.scouting:
+            console.print(self.cfg.screen_width - 11, row, "[Scouting]", fg=config.TITLE_COLOR)
 
     def _render_bar(
         self,

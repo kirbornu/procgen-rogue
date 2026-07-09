@@ -21,6 +21,10 @@ if TYPE_CHECKING:
 class ActionResult:
     #: Whether performing this action advances the world (monsters then act).
     advances_turn: bool = False
+    #: Whether this was a deliberate *activity* (heal, scout, ...).  Activities
+    #: occupy the player, so the automatic attack is suppressed for the turn.
+    #: Moving and waiting are NOT activities and still auto-attack.
+    is_activity: bool = False
 
 
 class Action:
@@ -43,6 +47,38 @@ class QuitAction(Action):
 
     def perform(self, engine: "Engine") -> ActionResult:
         return ActionResult(advances_turn=False)
+
+
+class HealAction(Action):
+    """Activity: tend wounds to recover a small amount of HP.
+
+    Being an activity, it suppresses the auto-attack for the turn - you cannot
+    fight and bandage at the same time - while monsters still get to act.
+    """
+
+    def perform(self, engine: "Engine") -> ActionResult:
+        fighter = self.actor.fighter
+        if fighter is None:
+            return ActionResult(advances_turn=False)
+        recovered = fighter.heal(engine.cfg.heal_amount)
+        if recovered > 0:
+            engine.log.add(f"You tend your wounds (+{recovered} HP).", config.HP_BAR_FILLED)
+        else:
+            engine.log.add("You are already at full health.", config.TEXT_DIM)
+        return ActionResult(advances_turn=True, is_activity=True)
+
+
+class ScoutAction(Action):
+    """Activity: widen your field of view until you next move.
+
+    Sets the scouting state on the engine; :meth:`Engine.update_fov` then uses
+    the boosted radius, and moving clears it.
+    """
+
+    def perform(self, engine: "Engine") -> ActionResult:
+        engine.scouting = True
+        engine.log.add("You scan the surroundings.", config.TITLE_COLOR)
+        return ActionResult(advances_turn=True, is_activity=True)
 
 
 class MoveAction(Action):
@@ -110,10 +146,12 @@ class MeleeAction(Action):
 
 
 class BumpAction(Action):
-    """Directional player intent: attack a blocker if present, else step there.
+    """Directional player intent: step there, or hold ground against a blocker.
 
-    This keeps controls to a single set of movement keys while supporting the
-    "walk into a monster to fight it" convention.
+    Combat itself is handled by the engine's auto-attack (any enemy within the
+    player's attack range is struck automatically on a non-activity turn), so
+    bumping an enemy simply spends the turn in place and lets the auto-attack
+    land.  Walking into a wall does nothing and costs no turn.
     """
 
     def __init__(self, actor: "Entity", dx: int, dy: int) -> None:
@@ -126,5 +164,6 @@ class BumpAction(Action):
         dest_y = self.actor.y + self.dy
         target = engine.game_map.blocking_entity_at(dest_x, dest_y)
         if target is not None and target.fighter is not None:
-            return MeleeAction(self.actor, target).perform(engine)
+            # Hold position and fight; the auto-attack resolves the damage.
+            return ActionResult(advances_turn=True)
         return MoveAction(self.actor, self.dx, self.dy).perform(engine)

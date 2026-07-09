@@ -24,6 +24,8 @@ class Engine:
         self.rng = Rng(seed)
         self.log = MessageLog()
         self.game_over = False
+        #: While True the FOV radius is boosted; cleared as soon as the player moves.
+        self.scouting = False
 
         self.game_map, self.player = generate_dungeon(cfg, self.rng)
         self.update_fov()
@@ -31,13 +33,50 @@ class Engine:
 
     # --- turn loop ---------------------------------------------------------
     def handle_player_action(self, action: Action) -> None:
-        """Perform the player's action and, if it took time, run the world."""
+        """Perform the player's action and, if it took time, run the world.
+
+        Turn order for the player: perform the chosen action, then - unless it
+        was an activity - automatically attack any enemy in range, then let the
+        monsters act, then refresh the field of view.
+        """
         if self.game_over:
             return
+        before = (self.player.x, self.player.y)
         result = action.perform(self)
-        if result.advances_turn:
-            self.process_monster_turns()
-            self.update_fov()
+        if not result.advances_turn:
+            return
+
+        # Relocating cancels the scouting FOV bonus.
+        if (self.player.x, self.player.y) != before:
+            self.scouting = False
+
+        # Auto-attack fires on ordinary turns (moving/waiting) but not while the
+        # player is occupied with an activity such as healing or scouting.
+        if not result.is_activity:
+            self.auto_attack(self.player)
+
+        self.process_monster_turns()
+        self.update_fov()
+
+    def auto_attack(self, attacker: Entity) -> None:
+        """Strike the nearest living enemy within the attacker's attack range."""
+        fighter = attacker.fighter
+        if fighter is None or not attacker.is_alive:
+            return
+
+        nearest: Optional[Entity] = None
+        nearest_dist = fighter.attack_range + 1
+        for other in self.game_map.actors:
+            if other is attacker or other.fighter is None:
+                continue
+            dist = attacker.distance_to(other)
+            if dist <= fighter.attack_range and dist < nearest_dist:
+                nearest, nearest_dist = other, dist
+
+        if nearest is not None:
+            from .actions import MeleeAction
+
+            MeleeAction(attacker, nearest).resolve(self)
 
     def process_monster_turns(self) -> None:
         # Snapshot: entities may die (and be swapped to corpses) mid-iteration.
@@ -48,7 +87,10 @@ class Engine:
                 entity.ai.take_turn(self)
 
     def update_fov(self) -> None:
-        self.game_map.compute_fov(self.player.x, self.player.y, self.cfg.fov_radius)
+        radius = self.cfg.fov_radius
+        if self.scouting:
+            radius += self.cfg.scout_fov_bonus
+        self.game_map.compute_fov(self.player.x, self.player.y, radius)
 
     # --- combat outcomes ---------------------------------------------------
     def kill(self, target: Entity, killer: Entity) -> None:
