@@ -14,7 +14,7 @@ from rogue.components import Fighter, MonsterAI
 from rogue.engine import Engine
 from rogue.entity import Entity
 from rogue.geometry import Direction, chebyshev
-from rogue.items import MAX_BONUSES, MAX_LEVEL, MIN_BONUSES, generate_item
+from rogue.items import MAX_BONUSES_PER_LEVEL, MAX_LEVEL, MIN_BONUSES_PER_LEVEL, generate_item
 from rogue.rng import Rng
 from rogue.spawn import danger_color, danger_level, make_monster
 from rogue.ui.camera import Camera
@@ -103,7 +103,7 @@ def test_bump_attack_kills_monster_and_awards_loot():
     # Loot is now a procedurally generated item with 1..10 bonuses.
     items = engine.player.inventory.items
     assert len(items) == 1
-    assert MIN_BONUSES <= len(items[0].bonuses) <= MAX_BONUSES
+    assert MIN_BONUSES_PER_LEVEL <= len(items[0].bonuses) <= MAX_BONUSES_PER_LEVEL
 
 
 def test_monster_retaliates_when_adjacent():
@@ -180,7 +180,7 @@ def test_generated_item_is_bounded_and_named_by_level():
         requested = rng.randint(0, 9)  # includes out-of-range to test clamping
         item = generate_item(rng, requested)
         assert 1 <= item.level <= MAX_LEVEL
-        assert MIN_BONUSES <= len(item.bonuses) <= MAX_BONUSES
+        assert MIN_BONUSES_PER_LEVEL <= len(item.bonuses) <= MAX_BONUSES_PER_LEVEL
         # Higher level -> more words: exactly `level` words in the name.
         assert len(item.name.split()) == item.level
         assert all(value > 0 for value in item.bonuses.values())

@@ -9,7 +9,7 @@ CONFIG = json.loads(r'''
 {
   "app": "noise-lab",
   "version": 3,
-  "res": 128,
+  "res": 64,
   "mode": "tiles",
   "water": 0,
   "wall": 0.4,
@@ -17,108 +17,9 @@ CONFIG = json.loads(r'''
   "layers": [
     {
       "on": true,
-      "noise": "worley",
-      "seed": 162841,
-      "scale": 9,
-      "oct": 8,
-      "lac": 2.45,
-      "per": 0.32,
-      "ridged": true,
-      "warp": 0.2,
-      "warpF": 1,
-      "blend": "normal",
-      "weight": 1,
-      "op": {
-        "gain": 0.65,
-        "offset": 0.44,
-        "gamma": 2.25,
-        "invert": true
-      },
-      "geom": {
-        "on": false,
-        "shape": "rect",
-        "cmp": "below",
-        "thr": 0.35,
-        "minSize": 0
-      },
-      "mask": {
-        "on": true,
-        "low": 0,
-        "high": 1,
-        "feather": 0.08
-      }
-    },
-    {
-      "on": true,
       "noise": "value",
-      "seed": 753815,
-      "scale": 8,
-      "oct": 4,
-      "lac": 2.35,
-      "per": 0.34,
-      "ridged": false,
-      "warp": 2,
-      "warpF": 0.3,
-      "blend": "subtract",
-      "weight": 1,
-      "op": {
-        "gain": 1.15,
-        "offset": 0.06,
-        "gamma": 2.3,
-        "invert": true
-      },
-      "geom": {
-        "on": false,
-        "shape": "rect",
-        "cmp": "above",
-        "thr": 0.6,
-        "minSize": 12
-      },
-      "mask": {
-        "on": true,
-        "low": 0,
-        "high": 0.42,
-        "feather": 0.08
-      }
-    },
-    {
-      "on": true,
-      "noise": "value",
-      "seed": 770605,
-      "scale": 24,
-      "oct": 5,
-      "lac": 1.8,
-      "per": 0.54,
-      "ridged": false,
-      "warp": 2,
-      "warpF": 1.1,
-      "blend": "min",
-      "weight": 1,
-      "op": {
-        "gain": 1,
-        "offset": 0,
-        "gamma": 1,
-        "invert": false
-      },
-      "geom": {
-        "on": true,
-        "shape": "rect",
-        "cmp": "below",
-        "thr": 0.36,
-        "minSize": 0
-      },
-      "mask": {
-        "on": false,
-        "low": 0,
-        "high": 1,
-        "feather": 0.08
-      }
-    },
-    {
-      "on": true,
-      "noise": "value",
-      "seed": 335433,
-      "scale": 5,
+      "seed": 421955,
+      "scale": 2,
       "oct": 1,
       "lac": 3.5,
       "per": 0.36,
@@ -129,7 +30,7 @@ CONFIG = json.loads(r'''
       "weight": 1,
       "op": {
         "gain": 1.4,
-        "offset": 0.1,
+        "offset": 0.54,
         "gamma": 4,
         "invert": false
       },
@@ -145,6 +46,105 @@ CONFIG = json.loads(r'''
         "low": 0,
         "high": 0.3,
         "feather": 0.08
+      }
+    },
+    {
+      "on": true,
+      "noise": "value",
+      "seed": 420719,
+      "scale": 13,
+      "oct": 4,
+      "lac": 2.5,
+      "per": 0.3,
+      "ridged": false,
+      "warp": 0.95,
+      "warpF": 1.2,
+      "blend": "subtract",
+      "weight": 1,
+      "op": {
+        "gain": 0.9,
+        "offset": 0.28,
+        "gamma": 4,
+        "invert": false
+      },
+      "geom": {
+        "on": true,
+        "shape": "rect",
+        "cmp": "above",
+        "thr": 0.62,
+        "minSize": 8
+      },
+      "mask": {
+        "on": true,
+        "low": 0.46,
+        "high": 1,
+        "feather": 0
+      }
+    },
+    {
+      "on": true,
+      "noise": "worley",
+      "seed": 204795,
+      "scale": 4,
+      "oct": 1,
+      "lac": 2,
+      "per": 0.68,
+      "ridged": true,
+      "warp": 0,
+      "warpF": 1.7,
+      "blend": "subtract",
+      "weight": 1,
+      "op": {
+        "gain": 1,
+        "offset": 0.12,
+        "gamma": 4,
+        "invert": false
+      },
+      "geom": {
+        "on": false,
+        "shape": "rect",
+        "cmp": "above",
+        "thr": 0.6,
+        "minSize": 12
+      },
+      "mask": {
+        "on": true,
+        "low": 0.4,
+        "high": 1,
+        "feather": 0
+      }
+    },
+    {
+      "on": true,
+      "noise": "value",
+      "seed": 162380,
+      "scale": 7,
+      "oct": 4,
+      "lac": 1.8,
+      "per": 0.14,
+      "ridged": false,
+      "warp": 1.95,
+      "warpF": 1,
+      "blend": "add",
+      "weight": 1,
+      "op": {
+        "gain": 0.95,
+        "offset": 0.2,
+        "gamma": 4,
+        "invert": false
+      },
+      "geom": {
+        "on": true,
+        "shape": "rect",
+        "cmp": "above",
+        "thr": 0.5,
+        "minSize": 12
+      },
+      "mask": {
+        "on": true,
+        "low": 0,
+        "high": 0.36,
+        "feather": 0
       }
     }
   ]

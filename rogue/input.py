@@ -25,14 +25,14 @@ MOVE_KEYS: dict[int, tuple[int, int]] = {
     K.LEFT: (-1, 0),
     K.RIGHT: (1, 0),
     # vi-keys (KeySym names for letters are upper-case but map the plain keys)
-    K.H: (-1, 0),
-    K.J: (0, 1),
-    K.K: (0, -1),
-    K.L: (1, 0),
-    K.Y: (-1, -1),
-    K.U: (1, -1),
-    K.B: (-1, 1),
-    K.N: (1, 1),
+    K.A: (-1, 0),
+    K.X: (0, 1),
+    K.W: (0, -1),
+    K.D: (1, 0),
+    K.Q: (-1, -1),
+    K.E: (1, -1),
+    K.Z: (-1, 1),
+    K.C: (1, 1),
     # Numeric keypad
     K.KP_1: (-1, 1),
     K.KP_2: (0, 1),
@@ -44,7 +44,7 @@ MOVE_KEYS: dict[int, tuple[int, int]] = {
     K.KP_9: (1, -1),
 }
 
-WAIT_KEYS = {K.PERIOD, K.KP_5, K.CLEAR}
+WAIT_KEYS = {K.PERIOD, K.KP_5, K.CLEAR, K.S}
 
 
 class Command(enum.Enum):
@@ -84,11 +84,11 @@ def dispatch(event: tcod.event.Event, player: Entity) -> Dispatch:
         return WaitAction(player)
     if key == K.R:
         return HealAction(player)  # rest / heal (an activity)
-    if key == K.S:
+    if key == K.F:
         return ScoutAction(player)  # scout (an activity)
     if key == K.I:
         return Command.TOGGLE_INVENTORY
-    if key in (K.ESCAPE, K.Q):
+    if key == K.ESCAPE:
         return Command.QUIT
     return None
 

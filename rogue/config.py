@@ -44,7 +44,7 @@ class Config:
 
     # Layout: the map viewport sits on top, the HUD/log fills the rest.
     map_view_height: int = 43
-    log_height: int = 6  # rows reserved for the message log
+    log_height: int = 8  # rows reserved for the message log
 
     # The actual dungeon is larger than the viewport so the camera scrolls.
     map_width: int = 100
@@ -61,15 +61,15 @@ class Config:
 
     # Noise-cave generator (the default). The map is a square of this side; a
     # cell is a wall wherever the noise brightness exceeds ``wall_threshold``.
-    noise_map_size: int = 88
+    noise_map_size: int = 64
     wall_threshold: float = 0.4
     max_monsters: int = 40  # cap for a whole cave (grows with depth)
     monster_spacing: int = 45  # ~1 monster per this many floor tiles
-    min_teleport_region: int = 2  # smallest region that still gets a teleport
+    min_teleport_region: int = 20  # smallest region that still gets a teleport
 
     # Combat / progression.
-    player_hp: int = 30
-    player_power: int = 5
+    player_hp: int = 100
+    player_power: int = 10
     player_defense: int = 2
     player_attack_range: int = 1  # auto-attack reach, in tiles (Chebyshev)
     inventory_capacity: int = 64

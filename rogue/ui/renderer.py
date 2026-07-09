@@ -140,13 +140,13 @@ class Renderer:
     #: (paired key -> label) makes it the single place to update when bindings
     #: in ``input.py`` change.
     CONTROL_HINTS = [
-        ("move", "arrows/hjkl"),
-        (".", "wait"),
+        ("move", "arrows/numpad/qweadzxc"),
+        ("s", "wait"),
         ("r", "heal"),
-        ("s", "scout"),
+        ("f", "scout"),
         (">", "descend"),
         ("i", "inventory"),
-        ("q", "quit"),
+        ("Esc", "quit"),
     ]
 
     def _render_controls(self, console: tcod.console.Console) -> None:

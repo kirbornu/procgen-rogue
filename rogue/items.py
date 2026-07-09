@@ -33,10 +33,25 @@ NOUNS: List[str] = [
 # --- rarity colours by level (classic loot gradient) -----------------------
 LEVEL_COLORS: Dict[int, tuple] = {
     1: (0xB0, 0xB0, 0xB0),  # grey
-    2: (0x50, 0xC0, 0x50),  # green
-    3: (0x50, 0x90, 0xE0),  # blue
-    4: (0xB0, 0x60, 0xE0),  # purple
-    5: (0xF0, 0xA0, 0x30),  # orange
+    2: (0xB0, 0xB0, 0xB0),  # grey
+    3: (0xB0, 0xB0, 0xB0),  # grey
+    4: (0xB0, 0xB0, 0xB0),  # grey
+    5: (0x50, 0xC0, 0x50),  # green
+    6: (0x50, 0xC0, 0x50),  # green
+    7: (0x50, 0xC0, 0x50),  # green
+    8: (0x50, 0xC0, 0x50),  # green
+    9: (0x50, 0x90, 0xE0),  # blue
+   10: (0x50, 0x90, 0xE0),  # blue
+   11: (0x50, 0x90, 0xE0),  # blue
+   12: (0x50, 0x90, 0xE0),  # blue
+   13: (0xB0, 0x60, 0xE0),  # purple
+   14: (0xB0, 0x60, 0xE0),  # purple
+   15: (0xB0, 0x60, 0xE0),  # purple
+   16: (0xB0, 0x60, 0xE0),  # purple
+   17: (0xF0, 0xA0, 0x30),  # orange
+   18: (0xF0, 0xA0, 0x30),  # orange
+   19: (0xF0, 0xA0, 0x30),  # orange
+   20: (0xF0, 0xA0, 0x30),  # orange
 }
 
 # Relative frequency of each bonus type; the powerful reach/sight bonuses are
@@ -48,12 +63,12 @@ _BONUS_WEIGHTS: List[tuple] = [
     (BonusType.CRIT_CHANCE, 14),
     (BonusType.DODGE_CHANCE, 13),
     (BonusType.VIEW_RADIUS, 8),
-    (BonusType.ATTACK_RANGE, 4),
+    (BonusType.ATTACK_RANGE, 2),
 ]
 
-MAX_LEVEL = 5
-MIN_BONUSES = 1
-MAX_BONUSES = 10
+MAX_LEVEL = 20
+MIN_BONUSES_PER_LEVEL = 2
+MAX_BONUSES_PER_LEVEL = 3
 
 
 @dataclass(eq=False)  # identity equality: every rolled item is a distinct object
@@ -95,9 +110,9 @@ def _pick_bonus_type(rng: Rng) -> BonusType:
 
 def _roll_bonus_value(rng: Rng, btype: BonusType, level: int) -> float:
     if btype is BonusType.MAX_HP:
-        return rng.randint(3, 8) + 2 * level
+        return rng.randint(3, 8) + level
     if btype is BonusType.DAMAGE:
-        return rng.randint(1, 2) + level
+        return rng.randint(1, 2) * level // 2
     if btype is BonusType.HEAL_POWER:
         return rng.randint(1, 2) + level // 2
     if btype is BonusType.CRIT_CHANCE:
@@ -107,7 +122,7 @@ def _roll_bonus_value(rng: Rng, btype: BonusType, level: int) -> float:
     if btype is BonusType.VIEW_RADIUS:
         return 1 + (1 if level >= 4 else 0)
     if btype is BonusType.ATTACK_RANGE:
-        return 1
+        return level // 10
     return 0  # pragma: no cover - exhaustive above
 
 
@@ -117,7 +132,8 @@ def generate_item(rng: Rng, level: int) -> Item:
     name = _generate_name(rng, level)
 
     bonuses: Dict[BonusType, float] = {}
-    for _ in range(rng.randint(MIN_BONUSES, MAX_BONUSES)):
+    for _ in range(rng.randint(MIN_BONUSES_PER_LEVEL * level, 
+                               MAX_BONUSES_PER_LEVEL * level)):
         btype = _pick_bonus_type(rng)
         bonuses[btype] = bonuses.get(btype, 0) + _roll_bonus_value(rng, btype, level)
 

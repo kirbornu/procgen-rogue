@@ -57,8 +57,8 @@ def make_player(x: int, y: int, cfg: config.Config) -> Entity:
 
 def _danger_fraction(hp: int, power: int, crit: float, dodge: float, speed: float) -> float:
     """Collapse a monster's stats into a 0..1 danger rating."""
-    score = hp * 0.6 + power * 3 + crit * 100 * 0.4 + dodge * 100 * 0.4 + speed * 3
-    return max(0.0, min(1.0, score / 38.0))
+    score = hp * 0.2 + power * 0.5 + crit * 100 * 0.2 + dodge * 100 * 0.2 + speed * 1
+    return max(0.0, min(1.0, score / 100.0))
 
 
 def danger_level(fraction: float) -> int:
@@ -76,15 +76,16 @@ def danger_color(fraction: float) -> tuple:
 
 def make_monster(rng: Rng, x: int, y: int, depth: int = 1) -> Entity:
     """Roll a random standing/roaming monster."""
-    hp = rng.randint(4, 10) + 2 * depth
-    power = rng.randint(2, 5) + depth // 2
-    crit = rng.randint(0, 12) / 100.0
-    dodge = rng.randint(0, 12) / 100.0
-    speed = rng.randint(0, 4) / 4.0  # 0, .25, .5, .75, 1 -> stands still ... always moves
+    dgr = rng.randint(depth, 6 * depth)
+    hp = rng.randint(dgr, 2 * dgr) + 2 * dgr
+    power = rng.randint(dgr, 8 + dgr) + 2 * dgr
+    crit = rng.randint(dgr, 2 * dgr) / 100.0
+    dodge = rng.randint(dgr, 2 * dgr) / 100.0
+    speed = rng.randint(1, 6) / 4.0  # 0, .25, .5, .75, 1 -> stands still ... always moves
 
     fraction = _danger_fraction(hp, power, crit, dodge, speed)
     level = danger_level(fraction)
-    name = MONSTER_NAMES[level - 1]
+    name = MONSTER_NAMES[min(4, level // len(MONSTER_NAMES))]
 
     monster = Entity(
         x,
