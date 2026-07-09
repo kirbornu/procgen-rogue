@@ -121,4 +121,4 @@ def _populate_room(
         my = rng.randint(room.y1 + 1, room.y2 - 1)
         if any(True for _ in game_map.entities_at(mx, my)):
             continue
-        game_map.entities.append(make_monster(mx, my))
+        game_map.entities.append(make_monster(rng, mx, my))

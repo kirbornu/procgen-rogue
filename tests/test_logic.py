@@ -9,12 +9,16 @@ from dataclasses import replace
 
 from rogue import config
 from rogue.actions import BumpAction, HealAction, MoveAction, ScoutAction, WaitAction
+from rogue.bonuses import BonusType
+from rogue.components import Fighter, MonsterAI
 from rogue.engine import Engine
+from rogue.entity import Entity
 from rogue.geometry import Direction, chebyshev
-from rogue.items import make_stick, roll_loot
+from rogue.items import MAX_BONUSES, MAX_LEVEL, MIN_BONUSES, generate_item
 from rogue.rng import Rng
-from rogue.spawn import make_monster
+from rogue.spawn import danger_color, danger_level, make_monster
 from rogue.ui.camera import Camera
+from rogue.world.game_map import GameMap
 from rogue.world.procgen import generate_dungeon
 
 
@@ -55,46 +59,53 @@ def test_move_into_wall_is_blocked():
     assert (engine.player.x, engine.player.y) == (px, py)
 
 
-def test_bump_attack_kills_monster_and_awards_loot():
-    engine = Engine(seed=1)
-    px, py = engine.player.x, engine.player.y
-    # Put a fragile monster right next to the player.
-    monster = make_monster(px + 1, py)
-    monster.fighter.hp = 1
+def _place_monster(engine, dx, dy, *, hp=None, power=5):
+    """Drop a monster with deterministic combat stats near the player.
+
+    Procedural monsters roll random crit/dodge/power, so tests pin those down to
+    keep combat assertions reliable.
+    """
+    monster = make_monster(engine.rng, engine.player.x + dx, engine.player.y + dy)
+    if hp is not None:
+        monster.fighter.base_max_hp = hp
+        monster.fighter.hp = hp
+    monster.fighter.base_power = power
+    monster.fighter.base_crit_chance = 0.0
+    monster.fighter.base_dodge_chance = 0.0
     monster.fighter.defense = 0
     engine.game_map.entities.append(monster)
+    return monster
 
+
+def _adjacent_monster(engine, **kwargs):
+    return _place_monster(engine, 1, 0, **kwargs)
+
+
+def test_bump_attack_kills_monster_and_awards_loot():
+    engine = Engine(seed=1)
+    monster = _adjacent_monster(engine, hp=1)
     engine.handle_player_action(BumpAction(engine.player, 1, 0))
 
     assert not monster.is_alive
     assert engine.player.get("progress").kills == 1
     assert engine.player.get("progress").gold > 0
-    assert len(engine.player.inventory.items) == 1
-    assert engine.player.inventory.items[0].kind.value == "stick"
+    # Loot is now a procedurally generated item with 1..10 bonuses.
+    items = engine.player.inventory.items
+    assert len(items) == 1
+    assert MIN_BONUSES <= len(items[0].bonuses) <= MAX_BONUSES
 
 
 def test_monster_retaliates_when_adjacent():
     engine = Engine(seed=1)
-    px, py = engine.player.x, engine.player.y
-    monster = make_monster(px + 1, py)
-    engine.game_map.entities.append(monster)
+    _adjacent_monster(engine, hp=50)  # tough enough to survive and hit back
     start_hp = engine.player.fighter.hp
-
-    # Waiting next to a live monster should let it hit back.
     engine.handle_player_action(WaitAction(engine.player))
     assert engine.player.fighter.hp < start_hp
 
 
-def _adjacent_monster(engine):
-    """Drop a monster right next to the player and return it."""
-    monster = make_monster(engine.player.x + 1, engine.player.y)
-    engine.game_map.entities.append(monster)
-    return monster
-
-
 def test_auto_attack_strikes_enemy_in_range_on_wait():
     engine = Engine(seed=1)
-    monster = _adjacent_monster(engine)
+    monster = _adjacent_monster(engine, hp=50)
     before = monster.fighter.hp
     # Waiting is not an activity, so the auto-attack fires.
     engine.handle_player_action(WaitAction(engine.player))
@@ -110,7 +121,7 @@ def test_heal_restores_hp():
 
 def test_activity_suppresses_auto_attack():
     engine = Engine(seed=1)
-    monster = _adjacent_monster(engine)
+    monster = _adjacent_monster(engine, hp=50)
     before = monster.fighter.hp
     # Healing is an activity, so the player does not auto-attack this turn.
     engine.handle_player_action(HealAction(engine.player))
@@ -146,23 +157,108 @@ def test_attack_range_reaches_beyond_adjacent():
     cfg = replace(config.DEFAULT, player_attack_range=2)
     engine = Engine(cfg=cfg, seed=1)
     # Enemy two tiles away: out of a range-1 reach, in range for this config.
-    monster = make_monster(engine.player.x + 2, engine.player.y)
-    engine.game_map.entities.append(monster)
+    monster = _place_monster(engine, 2, 0, hp=50)
     before = monster.fighter.hp
     engine.handle_player_action(WaitAction(engine.player))
     assert monster.fighter.hp < before
 
 
-def test_loot_tiers_are_bounded():
+def test_generated_item_is_bounded_and_named_by_level():
     rng = Rng(99)
     for _ in range(500):
-        item = roll_loot(rng, config.DEFAULT)
-        assert 1 <= item.tier <= 5
+        requested = rng.randint(0, 9)  # includes out-of-range to test clamping
+        item = generate_item(rng, requested)
+        assert 1 <= item.level <= MAX_LEVEL
+        assert MIN_BONUSES <= len(item.bonuses) <= MAX_BONUSES
+        # Higher level -> more words: exactly `level` words in the name.
+        assert len(item.name.split()) == item.level
+        assert all(value > 0 for value in item.bonuses.values())
 
 
-def test_stick_tier_is_clamped():
-    assert make_stick(0).tier == 1
-    assert make_stick(9).tier == 5
+def test_equipment_is_limited_to_two_items():
+    engine = Engine(seed=1)
+    eq = engine.player.get("equipment")
+    items = [generate_item(engine.rng, 3) for _ in range(3)]
+    for item in items:
+        engine.player.inventory.add(item)
+
+    engine.toggle_equip(items[0])
+    engine.toggle_equip(items[1])
+    assert len(eq.equipped) == 2
+    engine.toggle_equip(items[2])  # third is refused
+    assert len(eq.equipped) == 2 and not eq.is_equipped(items[2])
+    engine.toggle_equip(items[0])  # unequipping frees a slot
+    assert len(eq.equipped) == 1
+
+
+def test_equipped_bonuses_apply_and_revert():
+    engine = Engine(seed=1)
+    fighter = engine.player.fighter
+    base_hp, base_power = fighter.max_hp, fighter.power
+
+    item = generate_item(engine.rng, 5)
+    item.bonuses.clear()
+    item.bonuses[BonusType.MAX_HP] = 10
+    item.bonuses[BonusType.DAMAGE] = 3
+    engine.player.inventory.add(item)
+
+    engine.toggle_equip(item)
+    assert fighter.max_hp == base_hp + 10
+    assert fighter.power == base_power + 3
+
+    engine.toggle_equip(item)  # unequip reverts stats and re-clamps HP
+    assert fighter.max_hp == base_hp
+    assert fighter.hp <= base_hp
+
+
+def test_view_and_heal_bonuses_reach_the_engine():
+    engine = Engine(seed=1)
+    base_heal = engine.heal_amount()
+    item = generate_item(engine.rng, 3)
+    item.bonuses.clear()
+    item.bonuses[BonusType.HEAL_POWER] = 4
+    item.bonuses[BonusType.VIEW_RADIUS] = 3
+    engine.player.inventory.add(item)
+    engine.toggle_equip(item)
+
+    assert engine.heal_amount() == base_heal + 4
+    assert engine._equipment_bonus(BonusType.VIEW_RADIUS) == 3
+
+
+def test_monster_moves_only_when_it_has_speed():
+    import types
+
+    from rogue.world import tiles
+
+    game_map = GameMap(20, 3)
+    game_map.tiles[1:19, 1:2] = tiles.FLOOR  # a one-row corridor at y=1
+
+    player = Entity(1, 1, "@", (255, 255, 255), "You", blocks_movement=True)
+    player.add("fighter", Fighter(10, 5, 2))
+    stub = types.SimpleNamespace(game_map=game_map, player=player, rng=Rng(0))
+
+    still = Entity(10, 1, "r", (0, 0, 0), "Rat", blocks_movement=True)
+    still.add("fighter", Fighter(5, 2, 0))
+    still.add("ai", MonsterAI(speed=0.0))
+    game_map.entities.append(still)
+    still.ai.take_turn(stub)
+    assert (still.x, still.y) == (10, 1)  # speed 0 -> never moves
+
+    fast = Entity(12, 1, "o", (0, 0, 0), "Ogre", blocks_movement=True)
+    fast.add("fighter", Fighter(5, 2, 0))
+    fast.add("ai", MonsterAI(speed=1.0, sight=20))
+    game_map.entities.append(fast)
+    fast.ai.take_turn(stub)
+    assert fast.x == 11  # stepped one tile toward the player at x=1
+
+
+def test_danger_maps_to_level_and_colour():
+    assert danger_level(0.0) == 1
+    assert danger_level(1.0) == MAX_LEVEL
+    assert danger_level(0.0) <= danger_level(0.5) <= danger_level(1.0)
+    low, high = danger_color(0.1), danger_color(0.9)
+    assert high[0] > low[0]  # deadlier is redder
+    assert high[1] < low[1]  # and less green
 
 
 def test_camera_clamps_to_map_bounds():

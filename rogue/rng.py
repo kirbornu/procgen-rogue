@@ -24,8 +24,15 @@ class Rng:
     def chance(self, probability: float) -> bool:
         return self._random.random() < probability
 
+    def random(self) -> float:
+        return self._random.random()
+
     def choice(self, seq: Sequence[T]) -> T:
         return self._random.choice(seq)
+
+    def sample(self, seq: Sequence[T], k: int) -> list[T]:
+        """Return ``k`` distinct elements from ``seq`` (order randomised)."""
+        return self._random.sample(list(seq), k)
 
     def weighted_index(self, weights: Sequence[int]) -> int:
         """Return an index into ``weights`` chosen proportionally to weight."""

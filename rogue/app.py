@@ -15,7 +15,7 @@ import tcod.event
 from . import config
 from .actions import Action
 from .engine import Engine
-from .input import Command, dispatch
+from .input import Command, InvCommand, dispatch, dispatch_inventory
 from .ui.renderer import Renderer
 
 
@@ -37,11 +37,29 @@ def run(seed: Optional[int] = None, cfg: config.Config = config.DEFAULT) -> None
 
             for event in tcod.event.wait():
                 context.convert_event(event)
-                command = dispatch(event, engine.player)
 
+                if renderer.show_inventory:
+                    _handle_inventory(event, engine, renderer)
+                    continue
+
+                command = dispatch(event, engine.player)
                 if command is Command.QUIT:
                     return
                 if command is Command.TOGGLE_INVENTORY:
-                    renderer.show_inventory = not renderer.show_inventory
-                elif isinstance(command, Action) and not renderer.show_inventory:
+                    renderer.open_inventory(engine)
+                elif isinstance(command, Action):
                     engine.handle_player_action(command)
+
+
+def _handle_inventory(event: tcod.event.Event, engine: Engine, renderer: Renderer) -> None:
+    command = dispatch_inventory(event)
+    if command is InvCommand.CLOSE:
+        renderer.show_inventory = False
+    elif command is InvCommand.UP:
+        renderer.move_inventory_cursor(-1, engine)
+    elif command is InvCommand.DOWN:
+        renderer.move_inventory_cursor(1, engine)
+    elif command is InvCommand.EQUIP:
+        item = renderer.selected_item(engine)
+        if item is not None:
+            engine.toggle_equip(item)

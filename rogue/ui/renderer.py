@@ -11,6 +11,7 @@ import tcod.console
 import tcod.constants
 
 from .. import config
+from ..bonuses import BonusType
 from ..engine import Engine
 from ..entity import Entity
 from ..world import tiles
@@ -22,6 +23,29 @@ class Renderer:
         self.cfg = cfg
         self.camera = Camera(cfg.screen_width, cfg.map_view_height)
         self.show_inventory = False
+        self.inv_cursor = 0
+
+    # --- inventory modal state --------------------------------------------
+    def open_inventory(self, engine: Engine) -> None:
+        self.show_inventory = True
+        self.inv_cursor = 0
+
+    def _inventory_items(self, engine: Engine):
+        inventory = engine.player.inventory
+        return inventory.items if inventory is not None else []
+
+    def move_inventory_cursor(self, delta: int, engine: Engine) -> None:
+        count = len(self._inventory_items(engine))
+        if count == 0:
+            self.inv_cursor = 0
+            return
+        self.inv_cursor = (self.inv_cursor + delta) % count
+
+    def selected_item(self, engine: Engine):
+        items = self._inventory_items(engine)
+        if 0 <= self.inv_cursor < len(items):
+            return items[self.inv_cursor]
+        return None
 
     def render(self, console: tcod.console.Console, engine: Engine) -> None:
         console.clear()
@@ -81,7 +105,12 @@ class Renderer:
         bar_width = 20
         self._render_bar(console, 1, row, fighter.hp, fighter.max_hp, bar_width)
 
-        stats = f" Gold {progress.gold}   Kills {progress.kills}   Sticks {len(inventory.items)}"
+        equipment = engine.player.get("equipment")
+        using = f"{len(equipment.equipped)}/{equipment.capacity}" if equipment else "0/0"
+        stats = (
+            f" Gold {progress.gold}   Kills {progress.kills}"
+            f"   Items {len(inventory.items)}   Using {using}"
+        )
         console.print(1 + bar_width + 1, row, stats, fg=config.TEXT_COLOR)
         if engine.scouting:
             console.print(self.cfg.screen_width - 11, row, "[Scouting]", fg=config.TITLE_COLOR)
@@ -134,25 +163,56 @@ class Renderer:
 
     # --- overlays ----------------------------------------------------------
     def _render_inventory(self, console: tcod.console.Console, engine: Engine) -> None:
-        inventory = engine.player.inventory
-        width, height = 40, 14
+        items = self._inventory_items(engine)
+        equipment = engine.player.get("equipment")
+        width, height = 54, 30
         x = (self.cfg.screen_width - width) // 2
-        y = (self.cfg.map_view_height - height) // 2
+        y = (self.cfg.screen_height - height) // 2
         console.draw_frame(x, y, width, height, fg=config.TITLE_COLOR, bg=config.BLACK)
-        console.print_box(x, y, width, 1, " Inventory ", fg=config.TITLE_COLOR, alignment=tcod.constants.CENTER)
+        console.print_box(
+            x, y, width, 1, " Inventory ", fg=config.TITLE_COLOR, alignment=tcod.constants.CENTER
+        )
 
-        counts = inventory.tier_counts()
-        if not counts:
-            console.print(x + 2, y + 2, "(empty)", fg=config.TEXT_DIM)
+        # Layout rows: title | list | separator | detail block | footer.
+        list_top = y + 2
+        footer_row = y + height - 2
+        detail_lines = len(BonusType) + 1  # item name + one row per bonus type
+        detail_top = footer_row - detail_lines
+        separator_row = detail_top - 1
+        list_rows = separator_row - list_top
+
+        if not items:
+            console.print(x + 2, list_top, "(empty - kill monsters for loot)", fg=config.TEXT_DIM)
         else:
-            from ..items import STICK_TIER_NAMES
+            self.inv_cursor = max(0, min(self.inv_cursor, len(items) - 1))
+            top = max(0, min(self.inv_cursor - list_rows + 1, len(items) - list_rows))
+            top = max(0, top)
+            for row, index in enumerate(range(top, min(len(items), top + list_rows))):
+                item = items[index]
+                selected = index == self.inv_cursor
+                equipped = equipment is not None and equipment.is_equipped(item)
+                cursor = ">" if selected else " "
+                mark = "*" if equipped else " "
+                text = f"{cursor}{mark} {item.display_name}"
+                fg = config.WHITE if selected else item.color
+                bg = config.WALL_DARK_BG if selected else config.BLACK
+                console.print(x + 2, list_top + row, text[: width - 4], fg=fg, bg=bg)
 
-            line = 0
-            for tier in sorted(counts):
-                label = f"T{tier} {STICK_TIER_NAMES[tier]:<14} x{counts[tier]}"
-                console.print(x + 2, y + 2 + line, label, fg=config.ITEM_COLOR)
-                line += 1
-        console.print(x + 2, y + height - 2, "Press 'i' to close", fg=config.TEXT_DIM)
+        # Detail panel for the highlighted item.
+        console.draw_rect(x + 1, separator_row, width - 2, 1, ch=ord("-"), fg=config.TEXT_DIM)
+        selected_item = self.selected_item(engine)
+        if selected_item is not None:
+            equipped = equipment is not None and equipment.is_equipped(selected_item)
+            state = "equipped" if equipped else "in pack"
+            console.print(
+                x + 2, detail_top, f"{selected_item.name} ({state})", fg=selected_item.color
+            )
+            for i, line in enumerate(selected_item.bonus_lines()):
+                console.print(x + 4, detail_top + 1 + i, line, fg=config.TEXT_COLOR)
+
+        console.print(
+            x + 2, footer_row, "j/k move   Enter/e equip   i/Esc close", fg=config.TEXT_DIM
+        )
 
     def _render_center_banner(self, console: tcod.console.Console, text: str) -> None:
         y = self.cfg.map_view_height // 2

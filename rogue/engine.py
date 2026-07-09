@@ -10,8 +10,9 @@ from typing import Optional
 
 from . import config
 from .actions import Action
+from .bonuses import BonusType
 from .entity import Entity, RenderOrder
-from .items import roll_loot
+from .items import Item, generate_item
 from .message_log import MessageLog
 from .rng import Rng
 from .world.game_map import GameMap
@@ -87,10 +88,32 @@ class Engine:
                 entity.ai.take_turn(self)
 
     def update_fov(self) -> None:
-        radius = self.cfg.fov_radius
+        radius = self.cfg.fov_radius + int(self._equipment_bonus(BonusType.VIEW_RADIUS))
         if self.scouting:
             radius += self.cfg.scout_fov_bonus
         self.game_map.compute_fov(self.player.x, self.player.y, radius)
+
+    # --- equipment-derived player values -----------------------------------
+    def _equipment_bonus(self, btype: BonusType) -> float:
+        equipment = self.player.get("equipment")
+        return equipment.total(btype) if equipment is not None else 0
+
+    def heal_amount(self) -> int:
+        return self.cfg.heal_amount + int(self._equipment_bonus(BonusType.HEAL_POWER))
+
+    def toggle_equip(self, item: Item) -> None:
+        """Equip or unequip an inventory item (max two in use at once)."""
+        equipment = self.player.get("equipment")
+        if equipment is None:
+            return
+        result = equipment.toggle(item)
+        if result == "equip":
+            self.log.add(f"You ready the {item.name}.", item.color)
+        elif result == "unequip":
+            self.log.add(f"You stow the {item.name}.", config.TEXT_DIM)
+        else:
+            self.log.add("You can only use two items at once.", config.TEXT_DIM)
+        self.update_fov()  # a view-radius item may have changed sight
 
     # --- combat outcomes ---------------------------------------------------
     def kill(self, target: Entity, killer: Entity) -> None:
@@ -112,18 +135,19 @@ class Engine:
         if loot_marker is None:
             return
 
-        item = roll_loot(self.rng, self.cfg)
+        # The monster's danger level sets the power of the item it drops.
+        item = generate_item(self.rng, loot_marker.level)
         progress = killer.get("progress")
         inventory = killer.inventory
 
         if progress is not None:
-            reward = self.cfg.reward_gold_per_tier * item.tier
+            reward = self.cfg.reward_gold_per_tier * item.level
             progress.gold += reward
             progress.kills += 1
 
         if inventory is not None:
             if inventory.add(item):
-                self.log.add(f"You loot a {item.display_name}.", config.ITEM_COLOR)
+                self.log.add(f"You loot the {item.display_name}.", item.color)
             else:
                 self.log.add("Your pack is full; the loot is lost.", config.TEXT_DIM)
 
