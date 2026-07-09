@@ -1,0 +1,1382 @@
+<title>Noise Lab — песочница процедурной генерации</title>
+<style>
+  :root {
+    --ground: #0e1418;
+    --panel: #151d23;
+    --panel-2: #1b252c;
+    --line: #26333c;
+    --line-soft: #1f2a31;
+    --ink: #d6dee2;
+    --ink-dim: #8b989f;
+    --ink-faint: #5d6b72;
+    --amber: #e8a552;
+    --amber-hot: #f4b968;
+    --cyan: #4fb3c4;
+    --danger: #d9695a;
+    --radius: 10px;
+    --tap: 46px;
+    --ff-ui: "Segoe UI", Roboto, system-ui, -apple-system, "Helvetica Neue", sans-serif;
+    --ff-mono: ui-monospace, "SF Mono", "Roboto Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --ground: #e7ecee; --panel: #f6f8f9; --panel-2: #eef2f3; --line: #d3dbdf;
+      --line-soft: #dfe5e8; --ink: #182126; --ink-dim: #4f5c63; --ink-faint: #7f8c93;
+      --amber: #b46a1e; --amber-hot: #98590f; --cyan: #1f7c8c; --danger: #b23f30;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #0e1418; --panel: #151d23; --panel-2: #1b252c; --line: #26333c;
+    --line-soft: #1f2a31; --ink: #d6dee2; --ink-dim: #8b989f; --ink-faint: #5d6b72;
+    --amber: #e8a552; --amber-hot: #f4b968; --cyan: #4fb3c4; --danger: #d9695a;
+  }
+  :root[data-theme="light"] {
+    --ground: #e7ecee; --panel: #f6f8f9; --panel-2: #eef2f3; --line: #d3dbdf;
+    --line-soft: #dfe5e8; --ink: #182126; --ink-dim: #4f5c63; --ink-faint: #7f8c93;
+    --amber: #b46a1e; --amber-hot: #98590f; --cyan: #1f7c8c; --danger: #b23f30;
+  }
+
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--ground); color: var(--ink);
+    font-family: var(--ff-ui); line-height: 1.45; overflow-x: hidden;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .wrap { max-width: 1160px; margin: 0 auto; padding: 14px 14px 40px; }
+
+  header.top {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 12px; padding: 6px 2px 14px; flex-wrap: wrap;
+  }
+  .brand { display: flex; align-items: baseline; gap: 11px; }
+  .brand h1 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
+  .brand .tag {
+    font-family: var(--ff-mono); font-size: 10.5px; letter-spacing: 0.13em;
+    text-transform: uppercase; color: var(--amber);
+    border: 1px solid var(--line); border-radius: 999px; padding: 3px 9px;
+  }
+  .theme-btn {
+    background: var(--panel); border: 1px solid var(--line); color: var(--ink-dim);
+    border-radius: 8px; height: 34px; padding: 0 12px; cursor: pointer;
+    font-family: var(--ff-mono); font-size: 11px; letter-spacing: 0.06em;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .theme-btn:active { transform: scale(0.97); }
+
+  .grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
+  @media (min-width: 900px) {
+    .grid { grid-template-columns: minmax(0, 1fr) 382px; align-items: start; }
+    .stage-col { position: sticky; top: 14px; }
+  }
+
+  .stage { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; }
+  .frame {
+    position: relative; width: 100%; aspect-ratio: 1 / 1; border-radius: 6px;
+    overflow: hidden; background: #0a0f12; border: 1px solid var(--line-soft);
+  }
+  canvas#view {
+    position: absolute; inset: 0; width: 100%; height: 100%; display: block;
+    image-rendering: pixelated; image-rendering: crisp-edges;
+  }
+  .crosshair {
+    position: absolute; inset: 0; pointer-events: none; opacity: 0.5;
+    background:
+      linear-gradient(to right, transparent calc(50% - 0.5px), rgba(232,165,82,0.28) 50%, transparent calc(50% + 0.5px)),
+      linear-gradient(to bottom, transparent calc(50% - 0.5px), rgba(232,165,82,0.28) 50%, transparent calc(50% + 0.5px));
+  }
+  .frame.nocross .crosshair { display: none; }
+  .corner { position: absolute; width: 13px; height: 13px; border: 1.5px solid var(--amber); opacity: 0.65; pointer-events: none; }
+  .corner.tl { top: 7px; left: 7px; border-right: 0; border-bottom: 0; }
+  .corner.tr { top: 7px; right: 7px; border-left: 0; border-bottom: 0; }
+  .corner.bl { bottom: 7px; left: 7px; border-right: 0; border-top: 0; }
+  .corner.br { bottom: 7px; right: 7px; border-left: 0; border-top: 0; }
+
+  .readout {
+    display: flex; flex-wrap: wrap; gap: 4px 18px; margin-top: 11px;
+    font-family: var(--ff-mono); font-size: 11px; color: var(--ink-faint);
+    font-variant-numeric: tabular-nums;
+  }
+  .readout b { color: var(--ink-dim); font-weight: 500; }
+  .readout .v { color: var(--cyan); }
+
+  .actions { display: flex; gap: 9px; margin-top: 12px; }
+  .btn {
+    flex: 1; min-height: var(--tap); border-radius: 9px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--panel-2); color: var(--ink);
+    font-family: var(--ff-ui); font-size: 14px; font-weight: 600;
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    transition: transform .05s, border-color .15s, background .15s;
+  }
+  .btn:active { transform: scale(0.975); }
+  .btn.primary { background: linear-gradient(180deg, var(--amber-hot), var(--amber)); border-color: transparent; color: #1a1206; }
+  :root[data-theme="light"] .btn.primary { color: #fff; }
+  .btn.ghost { flex: 0 0 auto; padding: 0 15px; color: var(--ink-dim); }
+  .btn svg { width: 17px; height: 17px; }
+
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+  details.sec { border-bottom: 1px solid var(--line-soft); }
+  details.sec:last-child { border-bottom: 0; }
+  summary.sec-h {
+    list-style: none; cursor: pointer; user-select: none;
+    display: flex; align-items: center; gap: 10px; padding: 14px 16px; min-height: 22px;
+  }
+  summary.sec-h::-webkit-details-marker { display: none; }
+  summary.sec-h .idx { font-family: var(--ff-mono); font-size: 10px; color: var(--amber); letter-spacing: 0.08em; min-width: 22px; }
+  summary.sec-h .t { font-size: 13.5px; font-weight: 650; flex: 1; text-transform: uppercase; letter-spacing: 0.06em; }
+  summary.sec-h .chev { width: 16px; height: 16px; color: var(--ink-faint); transition: transform .2s; }
+  details.sec[open] summary.sec-h .chev { transform: rotate(90deg); }
+  .sec-body { padding: 4px 16px 18px; display: flex; flex-direction: column; gap: 16px; }
+
+  .seg { display: grid; gap: 6px; }
+  .seg .seg-track { display: flex; gap: 6px; background: var(--panel-2); padding: 4px; border-radius: 9px; border: 1px solid var(--line-soft); }
+  .seg button {
+    flex: 1; min-height: 40px; border: 0; border-radius: 6px; cursor: pointer;
+    background: transparent; color: var(--ink-dim);
+    font-family: var(--ff-mono); font-size: 12px; letter-spacing: 0.02em;
+    display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+    transition: background .15s, color .15s;
+  }
+  .seg button[aria-pressed="true"] { background: var(--ground); color: var(--amber); box-shadow: inset 0 0 0 1px var(--line); }
+  :root[data-theme="light"] .seg button[aria-pressed="true"] { background: #fff; }
+
+  .field-label { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; font-size: 12.5px; margin-bottom: 8px; }
+  .field-label .name { color: var(--ink-dim); }
+  .field-label .name em { font-style: normal; color: var(--ink-faint); font-size: 11px; font-family: var(--ff-mono); margin-left: 6px; }
+  .field-label .val {
+    font-family: var(--ff-mono); font-size: 13px; color: var(--cyan);
+    font-variant-numeric: tabular-nums; background: var(--panel-2);
+    border: 1px solid var(--line-soft); padding: 2px 8px; border-radius: 6px; min-width: 52px; text-align: right;
+  }
+
+  input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: var(--tap); background: transparent; cursor: pointer; margin: 0; }
+  input[type=range]::-webkit-slider-runnable-track { height: 6px; border-radius: 3px; background: var(--line); }
+  input[type=range]::-moz-range-track { height: 6px; border-radius: 3px; background: var(--line); }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 26px; height: 26px; margin-top: -10px; border-radius: 50%; background: var(--amber); border: 3px solid var(--ground); box-shadow: 0 0 0 1px var(--amber); }
+  input[type=range]::-moz-range-thumb { width: 22px; height: 22px; border-radius: 50%; background: var(--amber); border: 3px solid var(--ground); box-shadow: 0 0 0 1px var(--amber); }
+  input[type=range]:focus-visible { outline: 2px solid var(--cyan); outline-offset: 4px; border-radius: 4px; }
+
+  .seed-row { display: flex; gap: 8px; align-items: stretch; }
+  .seed-row input[type=number] {
+    flex: 1; min-height: var(--tap); background: var(--panel-2); border: 1px solid var(--line);
+    border-radius: 9px; color: var(--ink); font-family: var(--ff-mono); font-size: 15px;
+    padding: 0 12px; font-variant-numeric: tabular-nums; -moz-appearance: textfield;
+  }
+  .seed-row input::-webkit-outer-spin-button, .seed-row input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .icon-btn {
+    flex: 0 0 auto; width: var(--tap); min-height: var(--tap); border: 1px solid var(--line);
+    border-radius: 9px; background: var(--panel-2); color: var(--amber); cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .icon-btn:active { transform: scale(0.95); }
+  .icon-btn svg { width: 19px; height: 19px; }
+
+  .toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 30px; }
+  .toggle-row .name { font-size: 12.5px; color: var(--ink-dim); }
+  .switch { position: relative; width: 50px; height: 28px; flex: 0 0 auto; }
+  .switch input { opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+  .switch .track { position: absolute; inset: 0; border-radius: 999px; background: var(--line); transition: background .18s; pointer-events: none; }
+  .switch .knob { position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: var(--ink-faint); transition: transform .18s, background .18s; pointer-events: none; }
+  .switch input:checked + .track { background: color-mix(in srgb, var(--amber) 45%, var(--line)); }
+  .switch input:checked + .track + .knob { transform: translateX(22px); background: var(--amber); }
+
+  .hint { font-size: 11.5px; color: var(--ink-faint); font-family: var(--ff-mono); line-height: 1.5; }
+  .cond { display: none; }
+  .cond.on { display: flex; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-top: 12px; }
+  .legend .lg { display: flex; align-items: center; gap: 7px; font-family: var(--ff-mono); font-size: 11px; color: var(--ink-dim); }
+  .legend .sw { width: 13px; height: 13px; border-radius: 3px; border: 1px solid rgba(0,0,0,.25); }
+
+  /* ---------- layer stack ---------- */
+  .layers { display: flex; flex-direction: column; gap: 7px; }
+  .layer {
+    display: flex; align-items: stretch; gap: 2px; border: 1px solid var(--line);
+    border-left: 3px solid var(--line); border-radius: 9px; background: var(--panel-2);
+    overflow: hidden; transition: border-color .15s;
+  }
+  .layer.active { border-color: var(--amber); border-left-color: var(--amber); }
+  .layer.off { opacity: 0.5; }
+  .layer .eye {
+    flex: 0 0 auto; width: 40px; border: 0; background: transparent; color: var(--ink-dim);
+    cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+  }
+  .layer.active .eye { color: var(--amber); }
+  .layer .eye svg { width: 18px; height: 18px; }
+  .layer .pick {
+    flex: 1; min-width: 0; border: 0; background: transparent; cursor: pointer;
+    text-align: left; color: var(--ink); padding: 8px 4px; display: flex;
+    flex-direction: column; gap: 3px; min-height: var(--tap);
+  }
+  .layer .pick .l1 { display: flex; align-items: center; gap: 8px; }
+  .layer .pick .lname { font-family: var(--ff-mono); font-size: 13px; color: var(--ink); }
+  .layer .pick .base-badge {
+    font-family: var(--ff-mono); font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--cyan); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px;
+  }
+  .layer .pick .l2 {
+    font-family: var(--ff-mono); font-size: 10.5px; color: var(--ink-faint);
+    letter-spacing: 0.02em; display: flex; gap: 8px; flex-wrap: wrap;
+  }
+  .layer .pick .blend-badge { color: var(--amber); }
+  .layer .pick .tag-badge { color: var(--cyan); }
+  .layer .ops { flex: 0 0 auto; display: flex; align-items: center; padding-right: 4px; }
+  .layer .ops button {
+    width: 30px; height: 40px; border: 0; background: transparent; color: var(--ink-faint);
+    cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+  }
+  .layer .ops button:active { color: var(--amber); }
+  .layer .ops button.del:active { color: var(--danger); }
+  .layer .ops button:disabled { opacity: 0.25; cursor: default; }
+  .layer .ops svg { width: 15px; height: 15px; }
+
+  .add-layer {
+    width: 100%; min-height: 42px; border: 1px dashed var(--line); border-radius: 9px;
+    background: transparent; color: var(--amber); cursor: pointer; font-family: var(--ff-mono);
+    font-size: 12.5px; letter-spacing: 0.03em; display: inline-flex; align-items: center;
+    justify-content: center; gap: 8px; margin-top: 3px;
+  }
+  .add-layer:active { transform: scale(0.99); background: var(--panel-2); }
+  .add-layer svg { width: 15px; height: 15px; }
+
+  .active-tag {
+    font-family: var(--ff-mono); font-size: 11px; color: var(--ink-faint);
+    padding: 8px 10px; border: 1px solid var(--line-soft); border-radius: 8px;
+    background: var(--panel-2);
+  }
+  .active-tag b { color: var(--amber); font-weight: 500; }
+
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: end; }
+  select.blend {
+    -webkit-appearance: none; appearance: none; width: 100%; min-height: var(--tap);
+    background-color: var(--panel-2); border: 1px solid var(--line); border-radius: 9px;
+    color: var(--ink); font-family: var(--ff-mono); font-size: 13.5px; padding: 0 34px 0 12px;
+    cursor: pointer;
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="%238b989f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>');
+    background-repeat: no-repeat; background-position: right 10px center;
+  }
+  select.blend:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+
+  /* ---------- import/export ---------- */
+  .io-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+  .io-btn {
+    min-height: var(--tap); border: 1px solid var(--line); border-radius: 9px;
+    background: var(--panel-2); color: var(--ink); cursor: pointer;
+    font-family: var(--ff-ui); font-size: 13px; font-weight: 600;
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .io-btn.wide { grid-column: 1 / -1; }
+  .io-btn:active { transform: scale(0.98); }
+  .io-btn svg { width: 16px; height: 16px; color: var(--amber); }
+
+  .modal {
+    position: fixed; inset: 0; z-index: 50; display: flex; align-items: center;
+    justify-content: center; padding: 16px;
+    background: color-mix(in srgb, #000 55%, transparent);
+    backdrop-filter: blur(3px);
+  }
+  .modal[hidden] { display: none; }
+  .modal-card {
+    width: 100%; max-width: 560px; max-height: 88vh; display: flex; flex-direction: column;
+    gap: 12px; background: var(--panel); border: 1px solid var(--line);
+    border-radius: 12px; padding: 16px;
+  }
+  .modal-head { display: flex; align-items: center; justify-content: space-between; }
+  .modal-head span { font-size: 15px; font-weight: 700; }
+  .modal-x { width: 34px; height: 34px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); color: var(--ink-dim); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+  .modal-x svg { width: 17px; height: 17px; }
+  #modalText {
+    width: 100%; flex: 1; min-height: 240px; resize: vertical;
+    background: var(--ground); border: 1px solid var(--line); border-radius: 9px;
+    color: var(--ink); font-family: var(--ff-mono); font-size: 12px; line-height: 1.5;
+    padding: 12px; white-space: pre; overflow: auto; tab-size: 4;
+  }
+  #modalText:focus-visible { outline: 2px solid var(--cyan); outline-offset: 1px; }
+  .modal-actions { display: flex; gap: 9px; }
+  #modalHint.err { color: var(--danger); }
+  #modalHint.ok { color: var(--cyan); }
+
+  footer.foot { margin-top: 22px; text-align: center; color: var(--ink-faint); font-family: var(--ff-mono); font-size: 11px; letter-spacing: 0.03em; }
+
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <h1>Noise Lab</h1>
+      <span class="tag">procgen · v2</span>
+    </div>
+    <button class="theme-btn" id="themeBtn" aria-label="Переключить тему">
+      <span id="themeIcon">◐</span><span id="themeLbl">тема</span>
+    </button>
+  </header>
+
+  <div class="grid">
+    <!-- ===== stage ===== -->
+    <div class="stage-col">
+      <div class="stage">
+        <div class="frame" id="frame">
+          <canvas id="view" width="200" height="200"></canvas>
+          <div class="crosshair"></div>
+          <span class="corner tl"></span><span class="corner tr"></span>
+          <span class="corner bl"></span><span class="corner br"></span>
+        </div>
+        <div class="readout">
+          <span><b>слоёв</b> <span class="v" id="roLayers">—</span></span>
+          <span><b>активный</b> <span class="v" id="roActive">—</span></span>
+          <span><b>сетка</b> <span class="v" id="roRes">—</span></span>
+          <span><b>t</b> <span class="v" id="roMs">—</span></span>
+        </div>
+        <div class="actions">
+          <button class="btn primary" id="regen">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+            Новые seed'ы
+          </button>
+          <button class="btn ghost" id="reset">Сброс</button>
+        </div>
+        <div class="legend" id="legend"></div>
+      </div>
+    </div>
+
+    <!-- ===== controls ===== -->
+    <div class="panel" id="controls">
+      <details class="sec" open>
+        <summary class="sec-h"><span class="idx">01</span><span class="t">Слои</span>
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg></summary>
+        <div class="sec-body">
+          <div class="layers" id="layerList"></div>
+          <button class="add-layer" id="addLayer">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+            Добавить слой
+          </button>
+          <p class="hint">Верхний в списке — базовый (нижний по стеку). Каждый следующий накладывается поверх выбранным режимом. Нажми на слой, чтобы править его параметры ниже.</p>
+        </div>
+      </details>
+
+      <details class="sec" open>
+        <summary class="sec-h"><span class="idx">02</span><span class="t">Наложение слоя</span>
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg></summary>
+        <div class="sec-body">
+          <div class="active-tag" id="activeTag">Активный слой: <b>—</b></div>
+          <div class="row2">
+            <div>
+              <div class="field-label"><span class="name">Режим</span></div>
+              <select class="blend" id="blend">
+                <option value="normal">Normal</option>
+                <option value="add">Add · сложение</option>
+                <option value="multiply">Multiply</option>
+                <option value="screen">Screen</option>
+                <option value="subtract">Subtract</option>
+                <option value="max">Max · светлее</option>
+                <option value="min">Min · темнее</option>
+              </select>
+            </div>
+            <div>
+              <div class="field-label"><span class="name">Вес</span><span class="val" id="weightV">1.00</span></div>
+              <input type="range" id="weight" min="0" max="1" step="0.02" value="1">
+            </div>
+          </div>
+          <p class="hint" id="baseHint" style="display:none">Это базовый слой — режим и вес к нему не применяются, он задаёт основу стека.</p>
+        </div>
+      </details>
+
+      <details class="sec" open>
+        <summary class="sec-h"><span class="idx">03</span><span class="t">Источник шума</span>
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg></summary>
+        <div class="sec-body">
+          <div class="seg">
+            <div class="seg-track" id="noiseSeg">
+              <button data-v="value" aria-pressed="true">Value</button>
+              <button data-v="perlin" aria-pressed="false">Perlin</button>
+              <button data-v="worley" aria-pressed="false">Worley</button>
+            </div>
+          </div>
+          <div>
+            <div class="field-label"><span class="name">Seed</span></div>
+            <div class="seed-row">
+              <input type="number" id="seed" value="1337" step="1">
+              <button class="icon-btn" id="seedRand" aria-label="Случайный seed">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="1.3" fill="currentColor"/><circle cx="16" cy="8" r="1.3" fill="currentColor"/><circle cx="12" cy="12" r="1.3" fill="currentColor"/><circle cx="8" cy="16" r="1.3" fill="currentColor"/><circle cx="16" cy="16" r="1.3" fill="currentColor"/></svg>
+              </button>
+            </div>
+          </div>
+          <div>
+            <div class="field-label"><span class="name">Масштаб <em>частота</em></span><span class="val" id="scaleV">6.0</span></div>
+            <input type="range" id="scale" min="1" max="24" step="0.5" value="6">
+          </div>
+          <p class="hint" id="worleyHint" style="display:none">Worley (клеточный) шум — расстояние до ближайшей точки. Даёт пятна, трещины и пещерные структуры.</p>
+        </div>
+      </details>
+
+      <details class="sec">
+        <summary class="sec-h"><span class="idx">04</span><span class="t">Фрактал (fBm)</span>
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg></summary>
+        <div class="sec-body">
+          <div>
+            <div class="field-label"><span class="name">Октавы</span><span class="val" id="octV">5</span></div>
+            <input type="range" id="oct" min="1" max="8" step="1" value="5">
+          </div>
+          <div>
+            <div class="field-label"><span class="name">Lacunarity <em>рост частоты</em></span><span class="val" id="lacV">2.00</span></div>
+            <input type="range" id="lac" min="1.2" max="3.5" step="0.05" value="2">
+          </div>
+          <div>
+            <div class="field-label"><span class="name">Persistence <em>затухание</em></span><span class="val" id="perV">0.50</span></div>
+            <input type="range" id="per" min="0.1" max="0.9" step="0.02" value="0.5">
+          </div>
+          <div class="toggle-row">
+            <span class="name">Ridged — острые хребты</span>
+            <label class="switch"><input type="checkbox" id="ridged"><span class="track"></span><span class="knob"></span></label>
+          </div>
+        </div>
+      </details>
+
+      <details class="sec">
+        <summary class="sec-h"><span class="idx">05</span><span class="t">Domain warp</span>
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg></summary>
+        <div class="sec-body">
+          <p class="hint">Искажает координаты слоя вторым шумом — появляются вихри и природные разводы.</p>
+          <div>
+            <div class="field-label"><span class="name">Сила искажения</span><span class="val" id="warpV">0.00</span></div>
+            <input type="range" id="warp" min="0" max="2" step="0.05" value="0">
+          </div>
+          <div>
+            <div class="field-label"><span class="name">Частота искажения</span><span class="val" id="warpFV">1.0</span></div>
+            <input type="range" id="warpF" min="0.3" max="4" step="0.1" value="1">
+          </div>
+        </div>
+      </details>
+
+      <details class="sec">
+        <summary class="sec-h"><span class="idx">06</span><span class="t">Операции</span>
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg></summary>
+        <div class="sec-body">
+          <p class="hint">Преобразуют яркость слоя после нормализации (до геометрии). Результат обрезается в 0…1.</p>
+          <div>
+            <div class="field-label"><span class="name">Множитель <em>× яркость</em></span><span class="val" id="opGainV">1.00</span></div>
+            <input type="range" id="opGain" min="0" max="3" step="0.05" value="1">
+          </div>
+          <div>
+            <div class="field-label"><span class="name">Сдвиг <em>+ яркость</em></span><span class="val" id="opOffsetV">0.00</span></div>
+            <input type="range" id="opOffset" min="-1" max="1" step="0.02" value="0">
+          </div>
+          <div>
+            <div class="field-label"><span class="name">Гамма <em>контраст</em></span><span class="val" id="opGammaV">1.00</span></div>
+            <input type="range" id="opGamma" min="0.2" max="4" step="0.05" value="1">
+          </div>
+          <div class="toggle-row">
+            <span class="name">Инверсия — 1 − яркость</span>
+            <label class="switch"><input type="checkbox" id="opInvert"><span class="track"></span><span class="knob"></span></label>
+          </div>
+        </div>
+      </details>
+
+      <details class="sec">
+        <summary class="sec-h"><span class="idx">07</span><span class="t">Геометрия</span>
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg></summary>
+        <div class="sec-body">
+          <p class="hint">Выделяет области ярче/темнее порога, обводит каждую прямоугольником или эллипсом по габаритам и заливает всю фигуру яркостью порога. Организатор хаоса — из пятен получаются комнаты.</p>
+          <div class="toggle-row">
+            <span class="name">Включить для этого слоя</span>
+            <label class="switch"><input type="checkbox" id="geomOn"><span class="track"></span><span class="knob"></span></label>
+          </div>
+          <div class="cond" id="geomBody" style="flex-direction:column; gap:16px;">
+            <div class="seg" style="width:100%"><div class="seg-track" id="geomShapeSeg">
+              <button data-v="rect" aria-pressed="true">Прямоугольник</button>
+              <button data-v="ellipse" aria-pressed="false">Эллипс</button>
+            </div></div>
+            <div class="seg" style="width:100%"><div class="seg-track" id="geomCmpSeg">
+              <button data-v="above" aria-pressed="true">Ярче X</button>
+              <button data-v="below" aria-pressed="false">Темнее X</button>
+            </div></div>
+            <div style="width:100%">
+              <div class="field-label"><span class="name">Порог X</span><span class="val" id="geomThrV">0.60</span></div>
+              <input type="range" id="geomThr" min="0" max="1" step="0.01" value="0.6">
+            </div>
+            <div style="width:100%">
+              <div class="field-label"><span class="name">Мин. размер <em>ячеек</em></span><span class="val" id="geomMinV">12</span></div>
+              <input type="range" id="geomMin" min="0" max="400" step="4" value="12">
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <details class="sec">
+        <summary class="sec-h"><span class="idx">08</span><span class="t">Маска</span>
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg></summary>
+        <div class="sec-body">
+          <p class="hint">Слой применяется только там, где яркость того, что под ним (нижние слои), попадает в диапазон. Растушёвка смягчает границы. У базового слоя маски нет — под ним ничего.</p>
+          <div class="toggle-row">
+            <span class="name">Маскировать по основе</span>
+            <label class="switch"><input type="checkbox" id="maskOn"><span class="track"></span><span class="knob"></span></label>
+          </div>
+          <div class="cond" id="maskBody" style="flex-direction:column; gap:16px;">
+            <div style="width:100%">
+              <div class="field-label"><span class="name">Нижний порог</span><span class="val" id="maskLowV">0.00</span></div>
+              <input type="range" id="maskLow" min="0" max="1" step="0.01" value="0">
+            </div>
+            <div style="width:100%">
+              <div class="field-label"><span class="name">Верхний порог</span><span class="val" id="maskHighV">1.00</span></div>
+              <input type="range" id="maskHigh" min="0" max="1" step="0.01" value="1">
+            </div>
+            <div style="width:100%">
+              <div class="field-label"><span class="name">Растушёвка</span><span class="val" id="maskFeatherV">0.08</span></div>
+              <input type="range" id="maskFeather" min="0" max="0.4" step="0.01" value="0.08">
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <details class="sec" open>
+        <summary class="sec-h"><span class="idx">09</span><span class="t">Отображение</span>
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg></summary>
+        <div class="sec-body">
+          <div class="seg">
+            <div class="seg-track" id="modeSeg">
+              <button data-v="height" aria-pressed="true">Ч/Б высота</button>
+              <button data-v="tiles" aria-pressed="false">Тайлы · рогалик</button>
+            </div>
+          </div>
+          <div class="cond" id="tileControls" style="flex-direction:column; gap:16px;">
+            <div style="width:100%">
+              <div class="field-label"><span class="name">Уровень воды</span><span class="val" id="waterV">0.32</span></div>
+              <input type="range" id="water" min="0" max="1" step="0.01" value="0.32">
+            </div>
+            <div style="width:100%">
+              <div class="field-label"><span class="name">Порог стен <em>камень</em></span><span class="val" id="wallV">0.62</span></div>
+              <input type="range" id="wall" min="0" max="1" step="0.01" value="0.62">
+            </div>
+            <div style="width:100%">
+              <div class="field-label"><span class="name">Сглаживание пещер <em>кл. автомат</em></span><span class="val" id="caveV">2</span></div>
+              <input type="range" id="cave" min="0" max="6" step="1" value="2">
+            </div>
+          </div>
+          <p class="hint cond on" id="heightHint">Итог стека нормализован 0…1 и показан как яркость. Чёрное — низко, белое — высоко.</p>
+        </div>
+      </details>
+
+      <details class="sec">
+        <summary class="sec-h"><span class="idx">10</span><span class="t">Разрешение сетки</span>
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg></summary>
+        <div class="sec-body">
+          <div>
+            <div class="field-label"><span class="name">Ячеек по стороне</span><span class="val" id="resV">160</span></div>
+            <input type="range" id="res" min="48" max="320" step="16" value="160">
+          </div>
+          <p class="hint">Больше ячеек — детальнее, но тяжелее (каждый слой считается отдельно). Пересчёт идёт при любом изменении.</p>
+        </div>
+      </details>
+
+      <details class="sec">
+        <summary class="sec-h"><span class="idx">11</span><span class="t">Импорт / экспорт</span>
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg></summary>
+        <div class="sec-body">
+          <p class="hint">Конфигурация — весь стек со всеми параметрами; её же можно загрузить обратно. Python-скрипт воспроизводит текущую карту: функция <b>generate(seed)</b> возвращает 2D-массив яркости 0…1.</p>
+          <div class="io-grid">
+            <button class="io-btn" id="expConfig">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+              Сохранить конфиг
+            </button>
+            <button class="io-btn" id="impConfig">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 9l5-5 5 5"/><path d="M12 4v12"/></svg>
+              Загрузить конфиг
+            </button>
+            <button class="io-btn wide" id="expPython">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m8 6-6 6 6 6"/><path d="m16 6 6 6-6 6"/></svg>
+              Экспорт в Python-скрипт
+            </button>
+          </div>
+        </div>
+      </details>
+    </div>
+  </div>
+
+  <!-- import/export modal -->
+  <div class="modal" id="modal" hidden>
+    <div class="modal-card">
+      <div class="modal-head">
+        <span id="modalTitle">Данные</span>
+        <button class="modal-x" id="modalClose" aria-label="Закрыть">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <textarea id="modalText" spellcheck="false" autocapitalize="off" autocorrect="off"></textarea>
+      <p class="hint" id="modalHint"></p>
+      <div class="modal-actions">
+        <button class="btn" id="modalCopy">Копировать</button>
+        <button class="btn primary" id="modalApply" hidden>Загрузить в приложение</button>
+      </div>
+    </div>
+  </div>
+
+  <footer class="foot">Noise Lab · всё считается локально в браузере · тач-управление</footer>
+</div>
+
+<script>
+"use strict";
+(function () {
+  const $ = id => document.getElementById(id);
+  const canvas = $("view");
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+
+  // ---------- Python export engine (standard library only) ----------
+  const PY_ENGINE = [
+    '#!/usr/bin/env python3',
+    '"""Noise Lab export. Standard library only.',
+    'generate(seed) -> 2D list of brightness in [0, 1] (rows of length = size).',
+    'generate(0) reproduces the Noise Lab view; other seeds reseed the whole stack.',
+    '"""',
+    'import math, json',
+    '',
+    "CONFIG = json.loads(r'''",
+    '__CONFIG_JSON__',
+    "''')",
+    '',
+    'M32 = 0xFFFFFFFF',
+    'def _imul(a, b): return ((a & M32) * (b & M32)) & M32',
+    'def _hash2(x, y, seed):',
+    '    h = (seed ^ _imul(x, 0x1657f5) ^ _imul(y, 0x27d4eb2f)) & M32',
+    '    h = _imul(h ^ (h >> 13), 0x5bd1e995)',
+    '    h = (h ^ (h >> 15)) & M32',
+    '    return h / 4294967296.0',
+    'def _fade(t): return t * t * t * (t * (t * 6 - 15) + 10)',
+    'def _lerp(a, b, t): return a + (b - a) * t',
+    'def _clamp01(v): return 0.0 if v < 0 else 1.0 if v > 1 else v',
+    'def _value(x, y, seed):',
+    '    x0 = math.floor(x); y0 = math.floor(y)',
+    '    u = _fade(x - x0); v = _fade(y - y0)',
+    '    a = _lerp(_hash2(x0, y0, seed), _hash2(x0 + 1, y0, seed), u)',
+    '    b = _lerp(_hash2(x0, y0 + 1, seed), _hash2(x0 + 1, y0 + 1, seed), u)',
+    '    return _lerp(a, b, v) * 2 - 1',
+    'def _grad_dot(ix, iy, x, y, seed):',
+    '    ang = _hash2(ix, iy, seed) * 6.28318530718',
+    '    return math.cos(ang) * (x - ix) + math.sin(ang) * (y - iy)',
+    'def _perlin(x, y, seed):',
+    '    x0 = math.floor(x); y0 = math.floor(y)',
+    '    u = _fade(x - x0); v = _fade(y - y0)',
+    '    a = _lerp(_grad_dot(x0, y0, x, y, seed), _grad_dot(x0 + 1, y0, x, y, seed), u)',
+    '    b = _lerp(_grad_dot(x0, y0 + 1, x, y, seed), _grad_dot(x0 + 1, y0 + 1, x, y, seed), u)',
+    '    return _lerp(a, b, v) * 1.41421356',
+    'def _worley(x, y, seed):',
+    '    xi = math.floor(x); yi = math.floor(y); f1 = float("inf")',
+    '    for oy in (-1, 0, 1):',
+    '        for ox in (-1, 0, 1):',
+    '            cx = xi + ox; cy = yi + oy',
+    '            px = cx + _hash2(cx, cy, seed)',
+    '            py = cy + _hash2(cx, cy, seed ^ 0x9e3779b9)',
+    '            d = (px - x) ** 2 + (py - y) ** 2',
+    '            if d < f1: f1 = d',
+    '    return min(1.0, math.sqrt(f1)) * 2 - 1',
+    'def _base(x, y, seed, kind):',
+    '    if kind == "perlin": return _perlin(x, y, seed)',
+    '    if kind == "worley": return _worley(x, y, seed)',
+    '    return _value(x, y, seed)',
+    'def _fbm(x, y, ly):',
+    '    amp = 1.0; freq = 1.0; s = 0.0; norm = 0.0',
+    '    for o in range(int(ly["oct"])):',
+    '        n = _base(x * freq, y * freq, (ly["seed"] + o * 1013) & M32, ly["noise"])',
+    '        if ly["ridged"]:',
+    '            n = 1 - abs(n); n = n * n * 2 - 1',
+    '        s += n * amp; norm += amp; amp *= ly["per"]; freq *= ly["lac"]',
+    '    return s / (norm if norm else 1)',
+    'def _sample(x, y, ly):',
+    '    if ly["warp"] > 0:',
+    '        qx = _fbm(x + 4.7, y + 2.3, ly); qy = _fbm(x + 1.9, y + 8.1, ly)',
+    '        x += ly["warp"] * qx; y += ly["warp"] * qy',
+    '    return _fbm(x, y, ly)',
+    'def _smoothstep(e0, e1, x):',
+    '    if e0 == e1: return 0.0 if x < e0 else 1.0',
+    '    t = _clamp01((x - e0) / (e1 - e0)); return t * t * (3 - 2 * t)',
+    'def _mask_factor(a, m):',
+    '    lo = m["low"]; hi = m["high"]',
+    '    if lo > hi: lo, hi = hi, lo',
+    '    f = m["feather"]',
+    '    if f <= 0: return 1.0 if (lo <= a <= hi) else 0.0',
+    '    return _smoothstep(lo - f, lo, a) * (1 - _smoothstep(hi, hi + f, a))',
+    'def _blend(mode, a, v, w):',
+    '    if mode == "add": r = a + v * w',
+    '    elif mode == "subtract": r = a - v * w',
+    '    elif mode == "multiply": r = a * (1 - w + v * w)',
+    '    elif mode == "screen": r = a + (1 - (1 - a) * (1 - v) - a) * w',
+    '    elif mode == "max": r = a + (max(a, v) - a) * w',
+    '    elif mode == "min": r = a + (min(a, v) - a) * w',
+    '    else: r = a + (v - a) * w',
+    '    return _clamp01(r)',
+    'def _apply_ops(fld, op):',
+    '    inv = op["invert"]; gain = op["gain"]; off = op["offset"]; gamma = op["gamma"]',
+    '    for k in range(len(fld)):',
+    '        v = fld[k]',
+    '        if inv: v = 1 - v',
+    '        v = _clamp01(v * gain + off)',
+    '        if gamma != 1: v = v ** gamma',
+    '        fld[k] = v',
+    'def _geometrize(fld, N, g):',
+    '    above = g["cmp"] == "above"; thr = g["thr"]; min_size = int(g["minSize"])',
+    '    binm = [1 if ((fld[k] > thr) if above else (fld[k] < thr)) else 0 for k in range(N * N)]',
+    '    out = list(fld); visited = [0] * (N * N)',
+    '    for sj in range(N):',
+    '        for si in range(N):',
+    '            start = sj * N + si',
+    '            if not binm[start] or visited[start]: continue',
+    '            minx = maxx = si; miny = maxy = sj; area = 0',
+    '            stack = [start]; visited[start] = 1',
+    '            while stack:',
+    '                c = stack.pop(); area += 1',
+    '                cx = c % N; cy = c // N',
+    '                if cx < minx: minx = cx',
+    '                if cx > maxx: maxx = cx',
+    '                if cy < miny: miny = cy',
+    '                if cy > maxy: maxy = cy',
+    '                if cx > 0 and binm[c - 1] and not visited[c - 1]: visited[c - 1] = 1; stack.append(c - 1)',
+    '                if cx < N - 1 and binm[c + 1] and not visited[c + 1]: visited[c + 1] = 1; stack.append(c + 1)',
+    '                if cy > 0 and binm[c - N] and not visited[c - N]: visited[c - N] = 1; stack.append(c - N)',
+    '                if cy < N - 1 and binm[c + N] and not visited[c + N]: visited[c + N] = 1; stack.append(c + N)',
+    '            if area < min_size: continue',
+    '            if g["shape"] == "ellipse":',
+    '                cx0 = (minx + maxx) / 2; cy0 = (miny + maxy) / 2',
+    '                rx = max(0.5, (maxx - minx) / 2); ry = max(0.5, (maxy - miny) / 2)',
+    '                for y in range(miny, maxy + 1):',
+    '                    for x in range(minx, maxx + 1):',
+    '                        if ((x - cx0) / rx) ** 2 + ((y - cy0) / ry) ** 2 <= 1: out[y * N + x] = thr',
+    '            else:',
+    '                for y in range(miny, maxy + 1):',
+    '                    for x in range(minx, maxx + 1): out[y * N + x] = thr',
+    '    return out',
+    'def _layer_field(ly, N, seed_off):',
+    '    ly = dict(ly); ly["seed"] = (ly["seed"] + seed_off) & M32',
+    '    fld = [0.0] * (N * N); mn = float("inf"); mx = float("-inf"); f = ly["scale"]',
+    '    for j in range(N):',
+    '        for i in range(N):',
+    '            v = _sample((i / N) * f, (j / N) * f, ly)',
+    '            fld[j * N + i] = v',
+    '            if v < mn: mn = v',
+    '            if v > mx: mx = v',
+    '    rng = (mx - mn) or 1',
+    '    for k in range(len(fld)): fld[k] = (fld[k] - mn) / rng',
+    '    _apply_ops(fld, ly["op"])',
+    '    if ly["geom"]["on"]: fld = _geometrize(fld, N, ly["geom"])',
+    '    return fld',
+    'def generate(seed=0, size=None):',
+    '    """Return a 2D list (rows) of brightness in [0, 1]."""',
+    '    N = int(size if size is not None else CONFIG["res"])',
+    '    acc = None',
+    '    for ly in CONFIG["layers"]:',
+    '        if not ly["on"]: continue',
+    '        fld = _layer_field(ly, N, int(seed))',
+    '        if acc is None:',
+    '            acc = fld; continue',
+    '        w = ly["weight"]; use_mask = ly["mask"]["on"]',
+    '        for k in range(N * N):',
+    '            wk = w * _mask_factor(acc[k], ly["mask"]) if use_mask else w',
+    '            if wk > 0: acc[k] = _blend(ly["blend"], acc[k], fld[k], wk)',
+    '    if acc is None: acc = [0.0] * (N * N)',
+    '    mn = min(acc); mx = max(acc); rng = (mx - mn) or 1',
+    '    acc = [(v - mn) / rng for v in acc]',
+    '    return [acc[j * N:(j + 1) * N] for j in range(N)]',
+    'def save_pgm(grid, path="noise.pgm"):',
+    '    N = len(grid); W = len(grid[0]) if N else 0',
+    '    with open(path, "wb") as fh:',
+    '        fh.write(("P5\\n%d %d\\n255\\n" % (W, N)).encode())',
+    '        fh.write(bytes(max(0, min(255, int(v * 255))) for row in grid for v in row))',
+    'if __name__ == "__main__":',
+    '    import sys',
+    '    s = int(sys.argv[1]) if len(sys.argv) > 1 else 0',
+    '    g = generate(s)',
+    '    print("seed=%d  size=%dx%d" % (s, len(g[0]), len(g)))',
+    '    save_pgm(g); print("saved noise.pgm")',
+    '',
+  ].join("\n");
+
+  // ---------- layer model ----------
+  let uid = 1;
+  function makeLayer(o) {
+    return Object.assign({
+      id: uid++, on: true, noise: "value", seed: 1337, scale: 6,
+      oct: 5, lac: 2, per: 0.5, ridged: false, warp: 0, warpF: 1,
+      blend: "add", weight: 1,
+      op: { gain: 1, offset: 0, gamma: 1, invert: false },
+      geom: { on: false, shape: "rect", cmp: "above", thr: 0.6, minSize: 12 },
+      mask: { on: false, low: 0.0, high: 1.0, feather: 0.08 },
+    }, o || {});
+  }
+  function defaultLayers() {
+    uid = 1;
+    return [
+      makeLayer({ noise: "perlin", seed: 1337, scale: 4, oct: 5, blend: "normal", weight: 1 }),
+      makeLayer({ noise: "value", seed: 5501, scale: 13, oct: 4, blend: "add", weight: 0.35 }),
+    ];
+  }
+
+  const G = { mode: "height", water: 0.32, wall: 0.62, cave: 2, res: 160 };
+  const G_DEFAULTS = Object.assign({}, G);
+  let layers = defaultLayers();
+  let active = 0;
+  const L = () => layers[active];
+
+  // ---------- deterministic hashing ----------
+  function hash2(x, y, seed) {
+    let h = (seed | 0) ^ Math.imul(x | 0, 0x1657f5) ^ Math.imul(y | 0, 0x27d4eb2f);
+    h = Math.imul(h ^ (h >>> 13), 0x5bd1e995);
+    h ^= h >>> 15;
+    return (h >>> 0) / 4294967296;
+  }
+  const fade = t => t * t * t * (t * (t * 6 - 15) + 10);
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const clamp01 = v => v < 0 ? 0 : v > 1 ? 1 : v;
+
+  function valueNoise(x, y, seed) {
+    const x0 = Math.floor(x), y0 = Math.floor(y);
+    const xf = x - x0, yf = y - y0, u = fade(xf), v = fade(yf);
+    const a = lerp(hash2(x0, y0, seed), hash2(x0 + 1, y0, seed), u);
+    const b = lerp(hash2(x0, y0 + 1, seed), hash2(x0 + 1, y0 + 1, seed), u);
+    return lerp(a, b, v) * 2 - 1;
+  }
+  function gradDot(ix, iy, x, y, seed) {
+    const ang = hash2(ix, iy, seed) * 6.28318530718;
+    return Math.cos(ang) * (x - ix) + Math.sin(ang) * (y - iy);
+  }
+  function perlin(x, y, seed) {
+    const x0 = Math.floor(x), y0 = Math.floor(y);
+    const xf = x - x0, yf = y - y0, u = fade(xf), v = fade(yf);
+    const a = lerp(gradDot(x0, y0, x, y, seed), gradDot(x0 + 1, y0, x, y, seed), u);
+    const b = lerp(gradDot(x0, y0 + 1, x, y, seed), gradDot(x0 + 1, y0 + 1, x, y, seed), u);
+    return lerp(a, b, v) * 1.41421356;
+  }
+  function worley(x, y, seed) {
+    const xi = Math.floor(x), yi = Math.floor(y);
+    let f1 = Infinity;
+    for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) {
+      const cx = xi + ox, cy = yi + oy;
+      const px = cx + hash2(cx, cy, seed);
+      const py = cy + hash2(cx, cy, seed ^ 0x9e3779b9);
+      const dx = px - x, dy = py - y, d = dx * dx + dy * dy;
+      if (d < f1) f1 = d;
+    }
+    return Math.min(1, Math.sqrt(f1)) * 2 - 1;
+  }
+  function baseN(x, y, seed, kind) {
+    if (kind === "perlin") return perlin(x, y, seed);
+    if (kind === "worley") return worley(x, y, seed);
+    return valueNoise(x, y, seed);
+  }
+  function fbm(x, y, ly) {
+    let amp = 1, freq = 1, sum = 0, norm = 0;
+    for (let o = 0; o < ly.oct; o++) {
+      let n = baseN(x * freq, y * freq, ly.seed + o * 1013, ly.noise);
+      if (ly.ridged) { n = 1 - Math.abs(n); n = n * n * 2 - 1; }
+      sum += n * amp; norm += amp; amp *= ly.per; freq *= ly.lac;
+    }
+    return sum / (norm || 1);
+  }
+  function sampleLayer(x, y, ly) {
+    if (ly.warp > 0) {
+      const qx = fbm(x + 4.7, y + 2.3, ly), qy = fbm(x + 1.9, y + 8.1, ly);
+      x += ly.warp * qx; y += ly.warp * qy;
+    }
+    return fbm(x, y, ly);
+  }
+
+  // ---------- blend ----------
+  function blend(mode, a, v, w) {
+    let r;
+    switch (mode) {
+      case "add": r = a + v * w; break;
+      case "subtract": r = a - v * w; break;
+      case "multiply": r = a * (1 - w + v * w); break;
+      case "screen": r = a + (1 - (1 - a) * (1 - v) - a) * w; break;
+      case "max": r = a + (Math.max(a, v) - a) * w; break;
+      case "min": r = a + (Math.min(a, v) - a) * w; break;
+      default: r = a + (v - a) * w; break; // normal
+    }
+    return clamp01(r);
+  }
+
+  // ---------- geometrize: threshold -> connected blobs -> bbox shapes filled with X ----------
+  function geometrize(fld, N, g) {
+    const above = g.cmp === "above", thr = g.thr, minSize = g.minSize | 0;
+    const bin = new Uint8Array(N * N);
+    for (let k = 0; k < fld.length; k++) bin[k] = (above ? fld[k] > thr : fld[k] < thr) ? 1 : 0;
+    const out = Float32Array.from(fld);
+    const visited = new Uint8Array(N * N);
+    const stack = [];
+    for (let sj = 0; sj < N; sj++) for (let si = 0; si < N; si++) {
+      const start = sj * N + si;
+      if (!bin[start] || visited[start]) continue;
+      let minx = si, maxx = si, miny = sj, maxy = sj, area = 0;
+      stack.length = 0; stack.push(start); visited[start] = 1;
+      while (stack.length) {
+        const c = stack.pop(); area++;
+        const cx = c % N, cy = (c / N) | 0;
+        if (cx < minx) minx = cx; if (cx > maxx) maxx = cx;
+        if (cy < miny) miny = cy; if (cy > maxy) maxy = cy;
+        if (cx > 0) { const n = c - 1; if (bin[n] && !visited[n]) { visited[n] = 1; stack.push(n); } }
+        if (cx < N - 1) { const n = c + 1; if (bin[n] && !visited[n]) { visited[n] = 1; stack.push(n); } }
+        if (cy > 0) { const n = c - N; if (bin[n] && !visited[n]) { visited[n] = 1; stack.push(n); } }
+        if (cy < N - 1) { const n = c + N; if (bin[n] && !visited[n]) { visited[n] = 1; stack.push(n); } }
+      }
+      if (area < minSize) continue;
+      if (g.shape === "ellipse") {
+        const cx0 = (minx + maxx) / 2, cy0 = (miny + maxy) / 2;
+        const rx = Math.max(0.5, (maxx - minx) / 2), ry = Math.max(0.5, (maxy - miny) / 2);
+        for (let y = miny; y <= maxy; y++) for (let x = minx; x <= maxx; x++) {
+          const dx = (x - cx0) / rx, dy = (y - cy0) / ry;
+          if (dx * dx + dy * dy <= 1) out[y * N + x] = thr;
+        }
+      } else {
+        for (let y = miny; y <= maxy; y++) for (let x = minx; x <= maxx; x++) out[y * N + x] = thr;
+      }
+    }
+    return out;
+  }
+
+  function applyOps(fld, op) {
+    const inv = op.invert, gain = op.gain, off = op.offset, gamma = op.gamma;
+    const g = gamma !== 1;
+    for (let k = 0; k < fld.length; k++) {
+      let v = fld[k];
+      if (inv) v = 1 - v;
+      v = clamp01(v * gain + off);
+      if (g) v = Math.pow(v, gamma);
+      fld[k] = v;
+    }
+  }
+
+  function smoothstep(e0, e1, x) {
+    if (e0 === e1) return x < e0 ? 0 : 1;
+    const t = clamp01((x - e0) / (e1 - e0));
+    return t * t * (3 - 2 * t);
+  }
+  function maskFactor(a, m) {
+    let lo = m.low, hi = m.high; if (lo > hi) { const t = lo; lo = hi; hi = t; }
+    const f = m.feather;
+    if (f <= 0) return (a >= lo && a <= hi) ? 1 : 0;
+    return smoothstep(lo - f, lo, a) * (1 - smoothstep(hi, hi + f, a));
+  }
+
+  // ---------- render ----------
+  let rafId = 0;
+  function schedule() { if (!rafId) rafId = requestAnimationFrame(render); }
+
+  function computeLayerField(ly, N) {
+    const fld = new Float32Array(N * N);
+    let mn = Infinity, mx = -Infinity;
+    const f = ly.scale;
+    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+      const v = sampleLayer((i / N) * f, (j / N) * f, ly);
+      fld[j * N + i] = v; if (v < mn) mn = v; if (v > mx) mx = v;
+    }
+    const range = (mx - mn) || 1;
+    for (let k = 0; k < fld.length; k++) fld[k] = (fld[k] - mn) / range;
+    applyOps(fld, ly.op);
+    return ly.geom.on ? geometrize(fld, N, ly.geom) : fld;
+  }
+
+  function render() {
+    rafId = 0;
+    const t0 = performance.now();
+    const N = G.res;
+    canvas.width = N; canvas.height = N;
+
+    // composite enabled layers
+    const acc = new Float32Array(N * N);
+    let started = false;
+    for (const ly of layers) {
+      if (!ly.on) continue;
+      const fld = computeLayerField(ly, N);
+      if (!started) { acc.set(fld); started = true; continue; }
+      const w = ly.weight, useMask = ly.mask.on;
+      for (let k = 0; k < acc.length; k++) {
+        const wk = useMask ? w * maskFactor(acc[k], ly.mask) : w;
+        if (wk > 0) acc[k] = blend(ly.blend, acc[k], fld[k], wk);
+      }
+    }
+    // normalize composite
+    let mn = Infinity, mx = -Infinity;
+    for (let k = 0; k < acc.length; k++) { const v = acc[k]; if (v < mn) mn = v; if (v > mx) mx = v; }
+    const range = (mx - mn) || 1;
+    for (let k = 0; k < acc.length; k++) acc[k] = (acc[k] - mn) / range;
+
+    const img = ctx.createImageData(N, N);
+    const d = img.data;
+
+    if (G.mode === "height") {
+      for (let k = 0; k < acc.length; k++) {
+        const g = (acc[k] * 255) | 0, p = k * 4;
+        d[p] = d[p + 1] = d[p + 2] = g; d[p + 3] = 255;
+      }
+    } else {
+      let wallMap = new Uint8Array(N * N);
+      for (let k = 0; k < acc.length; k++) wallMap[k] = acc[k] > G.wall ? 1 : 0;
+      for (let step = 0; step < G.cave; step++) {
+        const next = new Uint8Array(N * N);
+        for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+          let c = 0;
+          for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) {
+            if (!ox && !oy) continue;
+            const ni = i + ox, nj = j + oy;
+            if (ni < 0 || nj < 0 || ni >= N || nj >= N) { c++; continue; }
+            c += wallMap[nj * N + ni];
+          }
+          next[j * N + i] = c >= 5 ? 1 : (c <= 2 ? 0 : wallMap[j * N + i]);
+        }
+        wallMap = next;
+      }
+      for (let k = 0; k < acc.length; k++) {
+        const h = acc[k], p = k * 4; let r, g, b;
+        if (wallMap[k]) { const s = 0.55 + h * 0.45; r = 74 * s; g = 66 * s; b = 56 * s; }
+        else if (h < G.water) { const t = h / (G.water || 1); r = lerp(18, 46, t); g = lerp(52, 108, t); b = lerp(74, 132, t); }
+        else { const t = (h - G.water) / ((G.wall - G.water) || 1); r = lerp(200, 150, t); g = lerp(182, 158, t); b = lerp(132, 120, t); }
+        d[p] = r | 0; d[p + 1] = g | 0; d[p + 2] = b | 0; d[p + 3] = 255;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+
+    const onCount = layers.filter(l => l.on).length;
+    $("roLayers").textContent = onCount + " / " + layers.length;
+    $("roActive").textContent = "L" + (active + 1) + " " + L().noise;
+    $("roRes").textContent = N + "×" + N;
+    $("roMs").textContent = (performance.now() - t0).toFixed(1) + " мс";
+  }
+
+  // ---------- layer list UI ----------
+  const NOISE_LABEL = { value: "Value", perlin: "Perlin", worley: "Worley" };
+  const BLEND_LABEL = { normal: "Normal", add: "Add", multiply: "Multiply", screen: "Screen", subtract: "Subtract", max: "Max", min: "Min" };
+  const eyeOn = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>';
+  const eyeOff = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.9 4.24A9.1 9.1 0 0 1 12 4c6.5 0 10 8 10 8a18 18 0 0 1-2.16 3.19M6.6 6.6A18 18 0 0 0 2 12s3.5 7 10 7a9 9 0 0 0 5.4-1.6"/><path d="m2 2 20 20"/></svg>';
+  const upSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg>';
+  const downSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>';
+  const delSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>';
+
+  function firstEnabledIndex() { return layers.findIndex(l => l.on); }
+
+  function renderLayerList() {
+    const list = $("layerList");
+    const baseIdx = firstEnabledIndex();
+    list.innerHTML = "";
+    layers.forEach((ly, i) => {
+      const isBase = i === baseIdx;
+      const row = document.createElement("div");
+      row.className = "layer" + (i === active ? " active" : "") + (ly.on ? "" : " off");
+      row.innerHTML =
+        '<button class="eye" data-act="toggle" data-i="' + i + '" aria-label="Вкл/выкл слой">' + (ly.on ? eyeOn : eyeOff) + '</button>' +
+        '<button class="pick" data-act="pick" data-i="' + i + '">' +
+          '<span class="l1"><span class="lname">L' + (i + 1) + ' · ' + NOISE_LABEL[ly.noise] + '</span>' +
+          (isBase ? '<span class="base-badge">база</span>' : '') + '</span>' +
+          '<span class="l2">' +
+            (isBase ? '<span>основа стека</span>' : '<span class="blend-badge">' + BLEND_LABEL[ly.blend] + '</span><span>вес ' + ly.weight.toFixed(2) + '</span>') +
+            '<span>масштаб ' + ly.scale.toFixed(1) + '</span>' +
+            ((ly.op.gain !== 1 || ly.op.offset !== 0 || ly.op.gamma !== 1 || ly.op.invert) ? '<span class="tag-badge">⚙ опер.</span>' : '') +
+            (ly.geom.on ? '<span class="tag-badge">◈ ' + (ly.geom.shape === "ellipse" ? "эллипс" : "прям.") + '</span>' : '') +
+            (ly.mask.on ? '<span class="tag-badge">▨ маска</span>' : '') +
+          '</span>' +
+        '</button>' +
+        '<div class="ops">' +
+          '<button data-act="up" data-i="' + i + '"' + (i === 0 ? ' disabled' : '') + ' aria-label="Выше">' + upSvg + '</button>' +
+          '<button data-act="down" data-i="' + i + '"' + (i === layers.length - 1 ? ' disabled' : '') + ' aria-label="Ниже">' + downSvg + '</button>' +
+          '<button class="del" data-act="del" data-i="' + i + '"' + (layers.length <= 1 ? ' disabled' : '') + ' aria-label="Удалить">' + delSvg + '</button>' +
+        '</div>';
+      list.appendChild(row);
+    });
+  }
+
+  $("layerList").addEventListener("click", e => {
+    const btn = e.target.closest("button[data-act]");
+    if (!btn) return;
+    const i = parseInt(btn.dataset.i, 10);
+    const act = btn.dataset.act;
+    if (act === "toggle") { layers[i].on = !layers[i].on; }
+    else if (act === "pick") { active = i; syncControls(); }
+    else if (act === "up" && i > 0) { [layers[i - 1], layers[i]] = [layers[i], layers[i - 1]]; if (active === i) active = i - 1; else if (active === i - 1) active = i; }
+    else if (act === "down" && i < layers.length - 1) { [layers[i + 1], layers[i]] = [layers[i], layers[i + 1]]; if (active === i) active = i + 1; else if (active === i + 1) active = i; }
+    else if (act === "del" && layers.length > 1) { layers.splice(i, 1); if (active >= layers.length) active = layers.length - 1; syncControls(); }
+    renderLayerList(); schedule();
+  });
+
+  $("addLayer").addEventListener("click", () => {
+    const src = L();
+    const nl = makeLayer({ noise: src.noise, scale: Math.min(24, src.scale * 2), oct: src.oct, seed: (Math.random() * 1e6) | 0, blend: "add", weight: 0.4 });
+    layers.push(nl); active = layers.length - 1;
+    renderLayerList(); syncControls(); schedule();
+  });
+
+  // ---------- per-layer control bindings ----------
+  const f1 = v => v.toFixed(1), f2 = v => v.toFixed(2), f0 = v => String(v | 0);
+  const RANGE_FMT = { scale: f1, oct: f0, lac: f2, per: f2, warp: f2, warpF: f1, weight: f2 };
+
+  function bindLayerRange(id, key) {
+    const el = $(id), out = $(id + "V"), fmt = RANGE_FMT[key];
+    el.addEventListener("input", () => {
+      L()[key] = parseFloat(el.value);
+      if (out) out.textContent = fmt(L()[key]);
+      if (key === "scale" || key === "weight") renderLayerList();
+      schedule();
+    });
+  }
+  ["scale", "oct", "lac", "per", "warp", "warpF", "weight"].forEach(k => bindLayerRange(k, k));
+
+  $("seed").addEventListener("input", () => { L().seed = parseInt($("seed").value || "0", 10) | 0; schedule(); });
+  $("seedRand").addEventListener("click", () => { L().seed = (Math.random() * 1e6) | 0; $("seed").value = L().seed; schedule(); });
+  $("ridged").addEventListener("change", e => { L().ridged = e.target.checked; schedule(); });
+  $("blend").addEventListener("change", () => { L().blend = $("blend").value; renderLayerList(); schedule(); });
+
+  function noiseSegSetup() {
+    $("noiseSeg").querySelectorAll("button").forEach(btn => {
+      btn.addEventListener("click", () => {
+        L().noise = btn.dataset.v;
+        $("noiseSeg").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", b === btn ? "true" : "false"));
+        $("worleyHint").style.display = L().noise === "worley" ? "block" : "none";
+        renderLayerList(); schedule();
+      });
+    });
+  }
+  noiseSegSetup();
+
+  // geometry + mask (nested per-layer objects)
+  function bindNestedRange(id, obj, key, fmt, redrawList) {
+    const el = $(id), out = $(id + "V");
+    el.addEventListener("input", () => {
+      L()[obj][key] = parseFloat(el.value);
+      if (out) out.textContent = fmt(L()[obj][key]);
+      if (redrawList) renderLayerList();
+      schedule();
+    });
+  }
+  bindNestedRange("geomThr", "geom", "thr", f2);
+  bindNestedRange("geomMin", "geom", "minSize", f0);
+  bindNestedRange("maskLow", "mask", "low", f2);
+  bindNestedRange("maskHigh", "mask", "high", f2);
+  bindNestedRange("maskFeather", "mask", "feather", f2);
+
+  $("geomOn").addEventListener("change", e => {
+    L().geom.on = e.target.checked; $("geomBody").classList.toggle("on", e.target.checked);
+    renderLayerList(); schedule();
+  });
+  $("maskOn").addEventListener("change", e => {
+    L().mask.on = e.target.checked; $("maskBody").classList.toggle("on", e.target.checked);
+    renderLayerList(); schedule();
+  });
+  function nestedSeg(segId, obj, key) {
+    $(segId).querySelectorAll("button").forEach(btn => {
+      btn.addEventListener("click", () => {
+        L()[obj][key] = btn.dataset.v;
+        $(segId).querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", b === btn ? "true" : "false"));
+        schedule();
+      });
+    });
+  }
+  nestedSeg("geomShapeSeg", "geom", "shape");
+  nestedSeg("geomCmpSeg", "geom", "cmp");
+
+  // operations
+  bindNestedRange("opGain", "op", "gain", f2, true);
+  bindNestedRange("opOffset", "op", "offset", f2, true);
+  bindNestedRange("opGamma", "op", "gamma", f2, true);
+  $("opInvert").addEventListener("change", e => { L().op.invert = e.target.checked; renderLayerList(); schedule(); });
+
+  // sync every per-layer control to the active layer
+  function syncControls() {
+    const ly = L();
+    $("seed").value = ly.seed;
+    const setR = (id, key) => { $(id).value = ly[key]; const o = $(id + "V"); if (o) o.textContent = RANGE_FMT[key](ly[key]); };
+    setR("scale", "scale"); setR("oct", "oct"); setR("lac", "lac"); setR("per", "per");
+    setR("warp", "warp"); setR("warpF", "warpF"); setR("weight", "weight");
+    $("ridged").checked = ly.ridged;
+    $("blend").value = ly.blend;
+    $("noiseSeg").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", b.dataset.v === ly.noise ? "true" : "false"));
+    $("worleyHint").style.display = ly.noise === "worley" ? "block" : "none";
+    // operations
+    $("opGain").value = ly.op.gain; $("opGainV").textContent = f2(ly.op.gain);
+    $("opOffset").value = ly.op.offset; $("opOffsetV").textContent = f2(ly.op.offset);
+    $("opGamma").value = ly.op.gamma; $("opGammaV").textContent = f2(ly.op.gamma);
+    $("opInvert").checked = ly.op.invert;
+    // geometry
+    $("geomOn").checked = ly.geom.on;
+    $("geomBody").classList.toggle("on", ly.geom.on);
+    $("geomThr").value = ly.geom.thr; $("geomThrV").textContent = f2(ly.geom.thr);
+    $("geomMin").value = ly.geom.minSize; $("geomMinV").textContent = f0(ly.geom.minSize);
+    $("geomShapeSeg").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", b.dataset.v === ly.geom.shape ? "true" : "false"));
+    $("geomCmpSeg").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", b.dataset.v === ly.geom.cmp ? "true" : "false"));
+    // mask
+    $("maskOn").checked = ly.mask.on;
+    $("maskBody").classList.toggle("on", ly.mask.on);
+    $("maskLow").value = ly.mask.low; $("maskLowV").textContent = f2(ly.mask.low);
+    $("maskHigh").value = ly.mask.high; $("maskHighV").textContent = f2(ly.mask.high);
+    $("maskFeather").value = ly.mask.feather; $("maskFeatherV").textContent = f2(ly.mask.feather);
+    // base layer note
+    const isBase = active === firstEnabledIndex();
+    $("baseHint").style.display = isBase ? "block" : "none";
+    $("activeTag").innerHTML = "Активный слой: <b>L" + (active + 1) + " · " + NOISE_LABEL[ly.noise] + "</b>" + (isBase ? " (база)" : "");
+  }
+
+  // ---------- global controls ----------
+  function bindGlobalRange(id, key, fmt) {
+    const el = $(id), out = $(id + "V");
+    el.addEventListener("input", () => { G[key] = parseFloat(el.value); if (out) out.textContent = fmt(G[key]); schedule(); });
+  }
+  bindGlobalRange("water", "water", f2);
+  bindGlobalRange("wall", "wall", f2);
+  bindGlobalRange("cave", "cave", f0);
+  bindGlobalRange("res", "res", f0);
+
+  function modeSegSetup() {
+    $("modeSeg").querySelectorAll("button").forEach(btn => {
+      btn.addEventListener("click", () => {
+        G.mode = btn.dataset.v;
+        $("modeSeg").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", b === btn ? "true" : "false"));
+        const tiles = G.mode === "tiles";
+        $("tileControls").classList.toggle("on", tiles);
+        $("heightHint").classList.toggle("on", !tiles);
+        $("frame").classList.toggle("nocross", tiles);
+        updateLegend(); schedule();
+      });
+    });
+  }
+  modeSegSetup();
+
+  function updateLegend() {
+    const el = $("legend");
+    if (G.mode === "tiles") {
+      el.innerHTML =
+        '<span class="lg"><span class="sw" style="background:#16384a"></span>вода</span>' +
+        '<span class="lg"><span class="sw" style="background:#c8b684"></span>пол</span>' +
+        '<span class="lg"><span class="sw" style="background:#4a4238"></span>стена</span>';
+    } else {
+      el.innerHTML =
+        '<span class="lg"><span class="sw" style="background:#000"></span>низко</span>' +
+        '<span class="lg"><span class="sw" style="background:#808080"></span>средне</span>' +
+        '<span class="lg"><span class="sw" style="background:#fff;border-color:#999"></span>высоко</span>';
+    }
+  }
+
+  // regenerate: new seed for every layer
+  $("regen").addEventListener("click", () => {
+    layers.forEach(ly => ly.seed = (Math.random() * 1e6) | 0);
+    syncControls(); schedule();
+  });
+
+  function syncGlobal() {
+    $("water").value = G.water; $("waterV").textContent = f2(G.water);
+    $("wall").value = G.wall; $("wallV").textContent = f2(G.wall);
+    $("cave").value = G.cave; $("caveV").textContent = f0(G.cave);
+    $("res").value = G.res; $("resV").textContent = f0(G.res);
+    $("modeSeg").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", b.dataset.v === G.mode ? "true" : "false"));
+    const tiles = G.mode === "tiles";
+    $("tileControls").classList.toggle("on", tiles);
+    $("heightHint").classList.toggle("on", !tiles);
+    $("frame").classList.toggle("nocross", tiles);
+  }
+
+  $("reset").addEventListener("click", () => {
+    layers = defaultLayers(); active = 0;
+    Object.assign(G, G_DEFAULTS);
+    syncGlobal(); renderLayerList(); syncControls(); updateLegend(); schedule();
+  });
+
+  // ---------- import / export ----------
+  function currentConfig() {
+    return {
+      app: "noise-lab", version: 3,
+      res: G.res, mode: G.mode, water: G.water, wall: G.wall, cave: G.cave,
+      layers: layers.map(l => ({
+        on: l.on, noise: l.noise, seed: l.seed, scale: l.scale, oct: l.oct,
+        lac: l.lac, per: l.per, ridged: l.ridged, warp: l.warp, warpF: l.warpF,
+        blend: l.blend, weight: l.weight,
+        op: { gain: l.op.gain, offset: l.op.offset, gamma: l.op.gamma, invert: l.op.invert },
+        geom: { on: l.geom.on, shape: l.geom.shape, cmp: l.geom.cmp, thr: l.geom.thr, minSize: l.geom.minSize },
+        mask: { on: l.mask.on, low: l.mask.low, high: l.mask.high, feather: l.mask.feather },
+      })),
+    };
+  }
+  function normalizeLayer(raw) {
+    const b = makeLayer();
+    Object.assign(b, raw || {});
+    b.op = Object.assign({ gain: 1, offset: 0, gamma: 1, invert: false }, (raw && raw.op) || {});
+    b.geom = Object.assign({ on: false, shape: "rect", cmp: "above", thr: 0.6, minSize: 12 }, (raw && raw.geom) || {});
+    b.mask = Object.assign({ on: false, low: 0, high: 1, feather: 0.08 }, (raw && raw.mask) || {});
+    b.id = uid++;
+    return b;
+  }
+  function loadConfig(text) {
+    const obj = JSON.parse(text);
+    if (!obj || obj.app !== "noise-lab" || !Array.isArray(obj.layers) || !obj.layers.length)
+      throw new Error("Это не конфигурация Noise Lab (нужны поля app и layers).");
+    layers = obj.layers.map(normalizeLayer);
+    active = 0;
+    if (typeof obj.res === "number") G.res = obj.res;
+    if (typeof obj.mode === "string") G.mode = obj.mode;
+    if (typeof obj.water === "number") G.water = obj.water;
+    if (typeof obj.wall === "number") G.wall = obj.wall;
+    if (typeof obj.cave === "number") G.cave = obj.cave;
+    syncGlobal(); renderLayerList(); syncControls(); updateLegend(); schedule();
+  }
+
+  // ---- Python codegen ----
+  function buildPython() {
+    const cfgJson = JSON.stringify(currentConfig(), null, 2);
+    return PY_ENGINE.replace("__CONFIG_JSON__", cfgJson);
+  }
+
+  // ---- modal ----
+  const modal = $("modal"), modalText = $("modalText"), modalHint = $("modalHint");
+  const modalApply = $("modalApply"), modalCopy = $("modalCopy"), modalTitle = $("modalTitle");
+  function openExport(title, text, hint) {
+    modalTitle.textContent = title;
+    modalText.value = text; modalText.readOnly = true;
+    modalApply.hidden = true; modalCopy.hidden = false;
+    modalHint.className = "hint"; modalHint.textContent = hint || "Выдели и скопируй текст (кнопкой или вручную).";
+    modal.hidden = false;
+  }
+  function openImport() {
+    modalTitle.textContent = "Загрузить конфигурацию";
+    modalText.value = ""; modalText.readOnly = false;
+    modalText.placeholder = "Вставь сюда сохранённый JSON-конфиг…";
+    modalApply.hidden = false; modalCopy.hidden = true;
+    modalHint.className = "hint"; modalHint.textContent = "Вставь ранее сохранённый конфиг и нажми «Загрузить».";
+    modal.hidden = false; modalText.focus();
+  }
+  function closeModal() { modal.hidden = true; }
+
+  $("expConfig").addEventListener("click", () => openExport("Конфигурация", JSON.stringify(currentConfig(), null, 2), "Сохрани этот текст — его можно загрузить обратно кнопкой «Загрузить конфиг»."));
+  $("expPython").addEventListener("click", () => openExport("Python-скрипт", buildPython(), "Сохрани как .py. Вызов generate(seed) вернёт 2D-массив яркости; запуск как скрипта сохранит noise.pgm."));
+  $("impConfig").addEventListener("click", openImport);
+  $("modalClose").addEventListener("click", closeModal);
+  modal.addEventListener("click", e => { if (e.target === modal) closeModal(); });
+  modalCopy.addEventListener("click", () => {
+    const txt = modalText.value;
+    const done = () => { modalHint.className = "hint ok"; modalHint.textContent = "Скопировано в буфер обмена."; };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(txt).then(done).catch(() => { modalText.select(); modalHint.className = "hint"; modalHint.textContent = "Не вышло автоматически — выдели и скопируй вручную."; });
+    } else { modalText.select(); document.execCommand && document.execCommand("copy"); done(); }
+  });
+  modalApply.addEventListener("click", () => {
+    try { loadConfig(modalText.value.trim()); closeModal(); }
+    catch (e) { modalHint.className = "hint err"; modalHint.textContent = "Ошибка: " + e.message; }
+  });
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && !modal.hidden) closeModal(); });
+
+  // ---------- theme ----------
+  const root = document.documentElement, themeBtn = $("themeBtn");
+  function currentDark() {
+    const attr = root.getAttribute("data-theme");
+    if (attr) return attr === "dark";
+    return matchMedia("(prefers-color-scheme: dark)").matches;
+  }
+  function paintThemeBtn() {
+    const dark = currentDark();
+    $("themeIcon").textContent = dark ? "☾" : "☀";
+    $("themeLbl").textContent = dark ? "тёмная" : "светлая";
+  }
+  themeBtn.addEventListener("click", () => { root.setAttribute("data-theme", currentDark() ? "light" : "dark"); paintThemeBtn(); });
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", paintThemeBtn);
+
+  // ---------- init ----------
+  $("frame").classList.add("nocross");
+  paintThemeBtn();
+  renderLayerList();
+  syncControls();
+  updateLegend();
+  render();
+})();
+</script>
