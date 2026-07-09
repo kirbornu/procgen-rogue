@@ -138,23 +138,19 @@ def _populate_room(
 # Noise-cave generator (the default)
 #
 # The Noise Lab script produces a greyscale field; a cell is a wall wherever the
-# brightness is above ``wall_threshold`` and floor otherwise.  Because the noise
-# leaves the floor split into disconnected caverns, the player and every monster
-# are placed inside the single largest connected region so the whole playable
-# area is reachable (isolated pockets simply read as unexplored rock).
+# brightness is above ``wall_threshold`` and floor otherwise.  This leaves the
+# floor split into disconnected regions.  The big-enough regions are strung into
+# a random *chain*: every region but the last holds a one-way portal to the next,
+# and the final region holds the down-stairs (and no portal).  Within each region
+# the arrival point and the exit (portal or stairs) sit far apart, so the player
+# has to cross the region to move on.  Small pockets are left as rock.
 # ---------------------------------------------------------------------------
 
 
 def generate_noise_dungeon(
     cfg: config.Config, rng: Rng, depth: int = 1, player: "Entity" | None = None
 ) -> Tuple[GameMap, "Entity"]:
-    """Build a cave from the noise generator and return ``(game_map, player)``.
-
-    The noise leaves the floor split into disconnected regions.  Rather than
-    discard the small ones, every region big enough gets a portal, and the
-    portals are wired into a single closed cycle so the whole map is traversable.
-    The player starts in the largest region, which also holds the down-stairs.
-    """
+    """Build a cave from the noise generator and return ``(game_map, player)``."""
     n = cfg.noise_map_size
     noise_seed = rng.randint(1, 2**31 - 1)
     grid = generate_noise(noise_seed, n)  # grid[y][x] brightness in [0, 1]
@@ -167,32 +163,57 @@ def generate_noise_dungeon(
             if row[x] <= threshold:  # bright -> wall, dark -> floor
                 game_map.tiles[x, y] = tiles.FLOOR
 
-    regions = _floor_regions(game_map)
-    if not regions:  # pathological all-wall map: carve a single safe tile
+    # Regions big enough to hold a portal form the traversable chain, in random
+    # order; anything smaller is left as unreachable rock.
+    chain = [r for r in _floor_regions(game_map) if len(r) >= cfg.min_teleport_region]
+    if not chain:  # pathological: carve a single safe tile so the game runs
         cx, cy = n // 2, n // 2
         game_map.tiles[cx, cy] = tiles.FLOOR
-        regions = [[(cx, cy)]]
-    regions.sort(key=len, reverse=True)
-    main_region = regions[0]
+        chain = [[(cx, cy)]]
+    rng.shuffle(chain)
 
-    # Player + a set of occupied cells we must not reuse for features/monsters.
-    px, py = rng.choice(main_region)
+    # Each region gets a far-apart (entry, exit) pair: the player arrives at
+    # ``entry`` and leaves from ``exit`` (a portal, or the stairs in the last).
+    entries_exits = [_far_pair(region) for region in chain]
+    occupied = set()
+
+    # The player starts at the first region's entry.
+    px, py = entries_exits[0][0]
     if player is None:
         player = make_player(px, py, cfg)
     else:
         player.x, player.y = px, py
     game_map.entities.append(player)
-    occupied = {(px, py)}
+    occupied.add((px, py))
 
-    # Down-stairs in the player's region.
-    stairs_cell = _pick_free(main_region, occupied, rng)
-    if stairs_cell is not None:
-        game_map.entities.append(make_stairs(*stairs_cell))
-        occupied.add(stairs_cell)
+    # Portals link region i -> the entry of region i+1 (one-way).  The last
+    # region gets the down-stairs instead, placed far from where you arrive.
+    last = len(chain) - 1
+    for i in range(len(chain)):
+        entry, exit_cell = entries_exits[i]
+        if i < last:
+            portal = make_teleport(*exit_cell)
+            portal.get("teleport").dest = entries_exits[i + 1][0]
+            game_map.entities.append(portal)
+        else:
+            game_map.entities.append(make_stairs(*exit_cell))
+        occupied.add(entry)
+        occupied.add(exit_cell)
 
-    _place_teleport_cycle(game_map, regions, cfg, rng, occupied)
-    _populate_cave(game_map, regions, cfg, rng, occupied, depth)
+    _populate_cave(game_map, chain, cfg, rng, occupied, depth)
     return game_map, player
+
+
+def _far_pair(region: List[Tuple[int, int]]) -> Tuple[Tuple[int, int], Tuple[int, int]]:
+    """Two far-apart cells of a region (approximate diameter endpoints)."""
+
+    def dist2(a, b):
+        return (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2
+
+    a = region[0]
+    b = max(region, key=lambda c: dist2(a, c))
+    c = max(region, key=lambda c: dist2(b, c))
+    return b, c  # (entry, exit)
 
 
 def _floor_regions(game_map: GameMap) -> List[List[Tuple[int, int]]]:
@@ -222,37 +243,6 @@ def _floor_regions(game_map: GameMap) -> List[List[Tuple[int, int]]]:
                             stack.append((nx, ny))
             regions.append(region)
     return regions
-
-
-def _pick_free(region, occupied, rng: Rng):
-    """A random cell of ``region`` not already used, or None if all are taken."""
-    candidates = [cell for cell in region if cell not in occupied]
-    return rng.choice(candidates) if candidates else None
-
-
-def _place_teleport_cycle(game_map, regions, cfg, rng, occupied) -> None:
-    """One portal per (large enough) region, linked into a single closed cycle."""
-    portals = []
-    for region in regions:
-        if len(region) < cfg.min_teleport_region:
-            continue
-        cell = _pick_free(region, occupied, rng)
-        if cell is None:
-            continue
-        portal = make_teleport(*cell)
-        game_map.entities.append(portal)
-        occupied.add(cell)
-        portals.append(portal)
-
-    # A cycle needs at least two nodes; a lone region needs no portal.
-    if len(portals) < 2:
-        for portal in portals:
-            game_map.entities.remove(portal)
-            occupied.discard((portal.x, portal.y))
-        return
-
-    for i, portal in enumerate(portals):
-        portal.get("teleport").target = portals[(i + 1) % len(portals)]
 
 
 def _populate_cave(game_map, regions, cfg, rng, occupied, depth: int) -> None:

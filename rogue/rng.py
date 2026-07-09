@@ -34,6 +34,10 @@ class Rng:
         """Return ``k`` distinct elements from ``seq`` (order randomised)."""
         return self._random.sample(list(seq), k)
 
+    def shuffle(self, seq: list) -> None:
+        """Shuffle a list in place."""
+        self._random.shuffle(seq)
+
     def weighted_index(self, weights: Sequence[int]) -> int:
         """Return an index into ``weights`` chosen proportionally to weight."""
         total = sum(weights)
