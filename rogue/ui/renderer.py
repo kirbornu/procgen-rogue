@@ -70,6 +70,8 @@ class Renderer:
         console.clear()
         self._render_map(console, engine)
         self._render_entities(console, engine)
+        if engine.tutorial:
+            self._render_tutorial_help(console, engine)
         self._render_status(console, engine)
         self._render_log(console, engine)
         self._render_controls(console)
@@ -79,6 +81,51 @@ class Renderer:
             self._render_inventory(console, engine)
         if engine.game_over:
             self._render_center_banner(console, lbl['die'])
+
+    # --- main menu ----------------------------------------------------------
+    def render_menu(self, console: tcod.console.Console, cursor: int, has_save: bool) -> None:
+        """Draw the main menu; ``has_save`` swaps Play for Continue."""
+        console.clear()
+        menu = lang.MENU
+        options = [
+            menu['continue'] if has_save else menu['play'],
+            menu['tutorial'],
+            menu['exit'],
+        ]
+        center = tcod.constants.CENTER
+        title_y = self.cfg.screen_height // 3
+        console.print_box(
+            0, title_y, self.cfg.screen_width, 1, menu['title'],
+            fg=config.TITLE_COLOR, alignment=center,
+        )
+        for i, label in enumerate(options):
+            selected = i == cursor
+            text = f"> {label} <" if selected else label
+            fg = config.WHITE if selected else config.TEXT_COLOR
+            console.print_box(
+                0, title_y + 3 + i * 2, self.cfg.screen_width, 1, text,
+                fg=fg, alignment=center,
+            )
+        console.print_box(
+            0, self.cfg.screen_height - 2, self.cfg.screen_width, 1,
+            menu['hints'], fg=config.TEXT_DIM, alignment=center,
+        )
+
+    def render_generating(self, console: tcod.console.Console) -> None:
+        """A one-frame banner while the (slow) cave generation runs."""
+        console.clear()
+        console.print_box(
+            0, self.cfg.screen_height // 2, self.cfg.screen_width, 1,
+            lang.MENU['generating'], fg=config.TITLE_COLOR,
+            alignment=tcod.constants.CENTER,
+        )
+
+    def _render_tutorial_help(self, console: tcod.console.Console, engine: Engine) -> None:
+        """The how-to-play text, drawn beside the little tutorial room."""
+        x = engine.game_map.width + 4  # the room hugs the top-left corner
+        for i, line in enumerate(lang.TUTORIAL['help']):
+            fg = config.TITLE_COLOR if i == 0 else config.TEXT_COLOR
+            console.print(x, 1 + i, line, fg=fg)
 
     # --- map + fog of war --------------------------------------------------
     def _render_map(self, console: tcod.console.Console, engine: Engine) -> None:

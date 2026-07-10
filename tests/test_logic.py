@@ -182,8 +182,8 @@ def test_generated_item_is_bounded_and_named_by_level():
         assert 1 <= item.level <= MAX_LEVEL
         # Bonuses aggregate by type, so distinct count is 1..#bonus types.
         assert 1 <= len(item.bonuses) <= len(BonusType)
-        # Higher level -> more words: exactly `level` words in the name.
-        assert len(item.name.split()) == item.level
+        # Higher level -> more words: level // 5 adjectives plus the noun.
+        assert len(item.name.split()) == item.level // 5 + 1
         assert all(value >= 0 for value in item.bonuses.values())
 
 
@@ -307,7 +307,7 @@ def test_input_dispatch_maps_keys():
     # Wait and UI/quit commands resolve.
     assert isinstance(dispatch(key(K.PERIOD), engine.player), WaitAction)
     assert dispatch(key(K.I), engine.player) is Command.TOGGLE_INVENTORY
-    assert dispatch(key(K.ESCAPE), engine.player) is Command.QUIT
+    assert dispatch(key(K.ESCAPE), engine.player) is Command.MENU
     # Unbound keys are ignored.
     assert dispatch(key(K.F1), engine.player) is None
 
@@ -440,11 +440,15 @@ def test_sell_item_gives_gold_and_removes_it():
 
 
 def test_character_sheet_reflects_upgrades():
+    # Look the label up through the active language so the test is locale-proof.
+    from importlib import import_module
+
+    damage_label = import_module(f"rogue.lang.{config.Config.language}").STATS["dm"]
     engine = make_engine(seed=1)
     engine.player.get("progress").gold = 1000
-    before = int(dict(engine.character_sheet())["Damage"])
+    before = int(dict(engine.character_sheet())[damage_label])
     engine.buy_upgrade(BonusType.DAMAGE)
-    after = int(dict(engine.character_sheet())["Damage"])
+    after = int(dict(engine.character_sheet())[damage_label])
     assert after > before
 
 
@@ -528,3 +532,62 @@ def _reachable_via_portals(game_map, start):
                     seen.add((nx, ny))
                     stack.append((nx, ny))
     return seen
+
+
+# --- main menu / tutorial ---------------------------------------------------
+def test_tutorial_room_layout_and_monsters():
+    from rogue.world.tutorial import ROOM_SIZE, generate_tutorial
+
+    engine = Engine(seed=1, generator=generate_tutorial, tutorial=True)
+    game_map = engine.game_map
+    # A 10x10 interior wrapped in walls.
+    assert (game_map.width, game_map.height) == (ROOM_SIZE + 2, ROOM_SIZE + 2)
+    walkable = game_map.tiles["walkable"]
+    assert walkable[1:-1, 1:-1].all()  # the whole interior is floor
+    assert not walkable[0, :].any() and not walkable[-1, :].any()
+    assert not walkable[:, 0].any() and not walkable[:, -1].any()
+
+    # A few weak monsters that never move.
+    monsters = [e for e in game_map.entities if e.get("ai") is not None]
+    assert len(monsters) >= 2
+    assert all(m.ai.speed == 0.0 for m in monsters)
+    assert all(m.fighter.hp <= 10 for m in monsters)
+
+
+def test_tutorial_monsters_drop_loot_when_killed():
+    from rogue.world.tutorial import generate_tutorial
+
+    engine = Engine(seed=1, generator=generate_tutorial, tutorial=True)
+    monster = [e for e in engine.game_map.entities if e.get("ai")][0]
+    engine.player.x, engine.player.y = monster.x - 1, monster.y
+    for _ in range(10):
+        if not monster.is_alive:
+            break
+        engine.handle_player_action(WaitAction(engine.player))  # auto-attack
+    assert not monster.is_alive
+    assert len(engine.player.inventory.items) == 1
+
+
+def test_menu_dispatch_maps_keys():
+    import tcod.event
+
+    from rogue.input import MenuCommand, dispatch_menu
+
+    K = tcod.event.KeySym
+
+    def key(sym):
+        return tcod.event.KeyDown(sym=sym, scancode=0, mod=tcod.event.Modifier(0))
+
+    assert dispatch_menu(key(K.UP)) is MenuCommand.UP
+    assert dispatch_menu(key(K.DOWN)) is MenuCommand.DOWN
+    assert dispatch_menu(key(K.RETURN)) is MenuCommand.SELECT
+    assert dispatch_menu(key(K.ESCAPE)) is MenuCommand.QUIT
+    assert dispatch_menu(key(K.F1)) is None
+
+
+def test_language_files_stay_in_sync():
+    """Every localisation exposes the same keys, so switching can't crash."""
+    from rogue.lang import en, ru
+
+    for name in ("SPAWN_NAMES", "STATS", "LOG_MESSAGES", "UI_LABELS", "ACTIONS", "MENU", "TUTORIAL"):
+        assert set(getattr(en, name).keys()) == set(getattr(ru, name).keys()), name

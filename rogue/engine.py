@@ -29,11 +29,14 @@ class Engine:
         cfg: config.Config = config.DEFAULT,
         seed: Optional[int] = None,
         generator=None,
+        tutorial: bool = False,
     ) -> None:
         self.cfg = cfg
         self.rng = Rng(seed)
         self.log = MessageLog()
         self.game_over = False
+        #: Tutorial sessions draw the how-to-play text and are discarded on exit.
+        self.tutorial = tutorial
         #: While True the FOV radius is boosted; cleared as soon as the player moves.
         self.scouting = False
         #: The merchant whose shop is open, or None.
@@ -45,7 +48,8 @@ class Engine:
         self.depth = 1
         self.game_map, self.player = self._generator(cfg, self.rng, depth=self.depth)
         self.update_fov()
-        self.log.add(msgs['init'], config.TITLE_COLOR)
+        welcome = lang.TUTORIAL['welcome'] if tutorial else msgs['init']
+        self.log.add(welcome, config.TITLE_COLOR)
 
     # --- turn loop ---------------------------------------------------------
     def handle_player_action(self, action: Action) -> None:
