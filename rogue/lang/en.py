@@ -81,5 +81,41 @@ CONTROL_HINTS = [
         ("r", "heal"),
         ("f", "scout"),
         ("i", "inventory"),
-        ("Esc", "quit"),
+        ("Esc", "menu"),
     ]
+
+MENU = {
+    'title' : 'PROCGEN ROGUE',
+    'play' : 'Play',
+    'continue' : 'Continue',
+    'tutorial' : 'Tutorial',
+    'exit' : 'Exit',
+    'hints' : 'up/down move   Enter select   Esc exit',
+    'generating' : 'Generating cave...',
+}
+
+TUTORIAL = {
+    'welcome' : 'Welcome to the tutorial.',
+    'help' : [
+        "HOW TO PLAY",
+        "",
+        "Move with the arrow keys, the numpad,",
+        "or the Q W E / A D / Z X C cluster.",
+        "S or .  waits a turn.",
+        "",
+        "Walk into a monster to fight it: any",
+        "enemy within your attack range is",
+        "struck automatically every turn.",
+        "",
+        "r   heal a little HP (an activity -",
+        "    you won't attack that turn)",
+        "f   scout: see further until you move",
+        "i   inventory and character sheet",
+        "",
+        "Kill the rats, loot them, then open",
+        "the inventory (i) and press Enter to",
+        "equip an item.",
+        "",
+        "Esc  return to the main menu.",
+    ],
+}

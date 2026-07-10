@@ -51,7 +51,17 @@ class Command(enum.Enum):
     """Non-turn UI commands the app layer handles directly."""
 
     QUIT = enum.auto()
+    MENU = enum.auto()  # leave the session and return to the main menu
     TOGGLE_INVENTORY = enum.auto()
+
+
+class MenuCommand(enum.Enum):
+    """Navigation on the main menu."""
+
+    UP = enum.auto()
+    DOWN = enum.auto()
+    SELECT = enum.auto()
+    QUIT = enum.auto()
 
 
 class InvCommand(enum.Enum):
@@ -94,7 +104,26 @@ def dispatch(event: tcod.event.Event, player: Entity) -> Dispatch:
     if key == K.I:
         return Command.TOGGLE_INVENTORY
     if key == K.ESCAPE:
-        return Command.QUIT
+        return Command.MENU
+    return None
+
+
+def dispatch_menu(event: tcod.event.Event) -> Optional[MenuCommand]:
+    """Key handling on the main menu."""
+    if isinstance(event, tcod.event.Quit):
+        return MenuCommand.QUIT
+    if not isinstance(event, tcod.event.KeyDown):
+        return None
+
+    key = event.sym
+    if key in (K.UP, K.W, K.K, K.KP_8):
+        return MenuCommand.UP
+    if key in (K.DOWN, K.X, K.J, K.KP_2):
+        return MenuCommand.DOWN
+    if key in (K.RETURN, K.KP_ENTER, K.SPACE):
+        return MenuCommand.SELECT
+    if key == K.ESCAPE:
+        return MenuCommand.QUIT
     return None
 
 

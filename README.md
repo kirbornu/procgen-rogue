@@ -59,6 +59,13 @@ so it can be tested head-lessly.
   inventory screen also shows your full **character sheet** (all current stats).
 - **Fog of war** with a **radius of 10** tiles; explored areas are remembered
   and drawn dimmed.
+- **Main menu** with Play / Tutorial / Exit. Esc during a game returns to the
+  menu with the run **kept** (Play becomes Continue) until the app closes; Esc
+  during the tutorial discards it, so it always starts fresh.
+- **Tutorial**: a small 10×10 room with the how-to-play text on screen and a
+  few weak, stationary rats to practise killing, looting and equipping on.
+- **Localisation**: all UI/log strings live in `rogue/lang/en.py` and
+  `rogue/lang/ru.py`; the language is picked by `Config.language`.
 
 ## Run it
 
@@ -85,8 +92,8 @@ python main.py --seed 42  # reproducible dungeon
 | walk into `T` | Open the merchant's shop |
 | `i` | Open / close inventory |
 | ↑/↓ · `w`/`x` | (in inventory / shop) move selection |
-| `Enter` | (inventory) equip/unequip · (shop) buy/sell |
-| `Esc` | Close overlay / quit |
+| `Enter` | (inventory) equip/unequip · (shop) buy/sell · (menu) select |
+| `Esc` | Close overlay / back to the main menu / exit |
 
 ## Run the tests
 

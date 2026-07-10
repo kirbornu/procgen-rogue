@@ -113,6 +113,24 @@ def make_monster(rng: Rng, x: int, y: int, depth: int = 1) -> Entity:
     return monster
 
 
+def make_tutorial_monster(x: int, y: int) -> Entity:
+    """A weak, perfectly still monster for the tutorial - easy to kill for loot."""
+    name = MONSTER_NAMES[0]
+    monster = Entity(
+        x,
+        y,
+        char=name[0].lower(),
+        color=CALM_COLOR,
+        name=name,
+        blocks_movement=True,
+        render_order=RenderOrder.ACTOR,
+    )
+    monster.add("fighter", Fighter(hp=6, power=2, defense=0))
+    monster.add("ai", MonsterAI(speed=0.0))  # never moves
+    monster.add("loot", Loot(level=2))
+    return monster
+
+
 def make_teleport(x: int, y: int) -> Entity:
     portal = Entity(
         x,
