@@ -5,6 +5,9 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: write   # <-- это даёт токену право создавать релизы
+
 jobs:
   build:
     name: Build on ${{ matrix.os }}
