@@ -17,6 +17,10 @@ from ..entity import Entity
 from ..world import tiles
 from .camera import Camera
 
+from importlib import import_module
+lang = import_module(f"rogue.lang.{config.Config.language}")
+lbl = lang.UI_LABELS
+
 
 class Renderer:
     def __init__(self, cfg: config.Config) -> None:
@@ -74,7 +78,7 @@ class Renderer:
         elif self.show_inventory:
             self._render_inventory(console, engine)
         if engine.game_over:
-            self._render_center_banner(console, "You have died.  Press ESC to quit.")
+            self._render_center_banner(console, lbl['die'])
 
     # --- map + fog of war --------------------------------------------------
     def _render_map(self, console: tcod.console.Console, engine: Engine) -> None:
@@ -125,12 +129,12 @@ class Renderer:
         equipment = engine.player.get("equipment")
         using = f"{len(equipment.equipped)}/{equipment.capacity}" if equipment else "0/0"
         stats = (
-            f" Depth {engine.depth}   Gold {progress.gold}   Kills {progress.kills}"
-            f"   Items {len(inventory.items)}   Using {using}"
+            f" {lbl['depth']} {engine.depth}   {lbl['gold']} {progress.gold}   {lbl['kills']} {progress.kills}"
+            f"   {lbl['items']} {len(inventory.items)}   {lbl['using']} {using}"
         )
         console.print(1 + bar_width + 1, row, stats, fg=config.TEXT_COLOR)
         if engine.scouting:
-            console.print(self.cfg.screen_width - 11, row, "[Scouting]", fg=config.TITLE_COLOR)
+            console.print(self.cfg.screen_width - 11, row, lbl['scouting'], fg=config.TITLE_COLOR)
 
     def _render_bar(
         self,
@@ -145,7 +149,7 @@ class Renderer:
         console.draw_rect(x, y, width, 1, ch=ord(" "), bg=config.HP_BAR_EMPTY)
         if fill > 0:
             console.draw_rect(x, y, fill, 1, ch=ord(" "), bg=config.HP_BAR_FILLED)
-        console.print(x + 1, y, f"HP {value}/{maximum}", fg=config.WHITE)
+        console.print(x + 1, y, f"{lbl['hp']} {value}/{maximum}", fg=config.WHITE)
 
     def _render_log(self, console: tcod.console.Console, engine: Engine) -> None:
         first_row = self.cfg.log_row
@@ -156,14 +160,7 @@ class Renderer:
     #: Always-on key hints, drawn along the bottom row.  Keeping the list here
     #: (paired key -> label) makes it the single place to update when bindings
     #: in ``input.py`` change.
-    CONTROL_HINTS = [
-        ("move", "arrows/numpad/qweadzxc"),
-        ("s", "wait"),
-        ("r", "heal"),
-        ("f", "scout"),
-        ("i", "inventory"),
-        ("Esc", "quit"),
-    ]
+    CONTROL_HINTS = lang.CONTROL_HINTS
 
     def _render_controls(self, console: tcod.console.Console) -> None:
         row = self.cfg.controls_row
@@ -188,7 +185,7 @@ class Renderer:
         y = (self.cfg.screen_height - height) // 2
         console.draw_frame(x, y, width, height, fg=config.TITLE_COLOR, bg=config.BLACK)
         console.print_box(
-            x, y, width, 1, " Inventory ", fg=config.TITLE_COLOR, alignment=tcod.constants.CENTER
+            x, y, width, 1, lbl['inv'], fg=config.TITLE_COLOR, alignment=tcod.constants.CENTER
         )
         for yy in range(y + 1, y + height - 1):  # column divider
             console.print(x + left_w, yy, "│", fg=config.TEXT_DIM)
@@ -203,7 +200,7 @@ class Renderer:
         text_w = left_w - 3
 
         if not items:
-            console.print(x + 2, list_top, "(empty - kill monsters for loot)", fg=config.TEXT_DIM)
+            console.print(x + 2, list_top, lbl['empty'], fg=config.TEXT_DIM)
         else:
             self.inv_cursor = max(0, min(self.inv_cursor, len(items) - 1))
             top = max(0, min(self.inv_cursor - list_rows + 1, len(items) - list_rows))
@@ -228,12 +225,12 @@ class Renderer:
                 console.print(x + 4, detail_top + 1 + i, line[:text_w], fg=config.TEXT_COLOR)
 
         # Right column: the character sheet (effective stats).
-        console.print(x + left_w + 2, y + 2, "Character", fg=config.TITLE_COLOR)
+        console.print(x + left_w + 2, y + 2, lbl['character'], fg=config.TITLE_COLOR)
         for i, (label, value) in enumerate(engine.character_sheet()):
             console.print(x + left_w + 2, y + 4 + i, f"{label:<10}{value}", fg=config.TEXT_COLOR)
 
         console.print(
-            x + 2, footer_row, "up/down move  Enter equip  i/Esc close", fg=config.TEXT_DIM
+            x + 2, footer_row, lbl['inv_hints'], fg=config.TEXT_DIM
         )
 
     def _render_shop(self, console: tcod.console.Console, engine: Engine) -> None:
@@ -247,7 +244,7 @@ class Renderer:
         y = (self.cfg.screen_height - height) // 2
         console.draw_frame(x, y, width, height, fg=config.MERCHANT_COLOR, bg=config.BLACK)
         console.print_box(
-            x, y, width, 1, f" Merchant - Gold: {gold} ", fg=config.MERCHANT_COLOR,
+            x, y, width, 1, f" {lbl['merch_title']} {gold} ", fg=config.MERCHANT_COLOR,
             alignment=tcod.constants.CENTER,
         )
 
@@ -255,23 +252,23 @@ class Renderer:
         footer_row = y + height - 2
 
         # Upgrades section (always fully visible).
-        console.print(x + 2, y + 2, "Buy permanent upgrades:", fg=config.TITLE_COLOR)
+        console.print(x + 2, y + 2, lbl['upgrade_title'], fg=config.TITLE_COLOR)
         for i, (kind, btype) in enumerate(rows[:num_upgrades]):
             cost = engine.upgrade_cost(btype)
             owned = engine.player.get("upgrades").count(btype)
-            label = f"{format_bonus(btype, UPGRADE_STEP[btype]):<16} {cost:>6}g   owned {owned}"
+            label = f"{format_bonus(btype, UPGRADE_STEP[btype]):<16} {cost:>6}{lbl['upgrade_row']}{owned}"
             self._shop_line(console, x, y + 3 + i, width, label, i == self.shop_cursor, gold >= cost)
 
         sep = y + 3 + num_upgrades
         console.draw_rect(x + 1, sep, width - 2, 1, ch=ord("-"), fg=config.TEXT_DIM)
-        console.print(x + 2, sep, " Sell items ", fg=config.TITLE_COLOR)
+        console.print(x + 2, sep, lbl['sell_title'], fg=config.TITLE_COLOR)
 
         # Sell section (scrolls if the pack is large).
         sell_top = sep + 1
         sell_rows = footer_row - sell_top
         sell_items = rows[num_upgrades:]
         if not sell_items:
-            console.print(x + 2, sell_top, "(nothing to sell)", fg=config.TEXT_DIM)
+            console.print(x + 2, sell_top, lbl['sell_nothing'], fg=config.TEXT_DIM)
         else:
             sel = self.shop_cursor - num_upgrades  # -1 if cursor is in upgrades
             top = 0
@@ -287,7 +284,7 @@ class Renderer:
                 )
 
         console.print(
-            x + 2, footer_row, "up/down move  Enter buy/sell  Esc close", fg=config.TEXT_DIM
+            x + 2, footer_row, lbl['merch_hints'], fg=config.TEXT_DIM
         )
 
     def _shop_line(self, console, x, row, width, text, selected, affordable) -> None:

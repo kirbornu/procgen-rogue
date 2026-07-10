@@ -18,17 +18,12 @@ from . import config
 from .bonuses import BonusType, format_bonus
 from .rng import Rng
 
+from importlib import import_module
+lang = import_module(f"rogue.lang.{config.Config.language}")
 # --- flavour word lists ----------------------------------------------------
-ADJECTIVES: List[str] = [
-    "Rusty", "Gleaming", "Ancient", "Cursed", "Blessed", "Jagged", "Twisted",
-    "Runed", "Feral", "Ethereal", "Vicious", "Humming", "Frostbitten", "Charred",
-    "Gilded", "Ravenous", "Whispering", "Fabled", "Wretched", "Storied",
-]
+ADJECTIVES = lang.ADJECTIVES
 
-NOUNS: List[str] = [
-    "Stick", "Branch", "Cudgel", "Rod", "Stave", "Splinter", "Baton", "Switch",
-    "Bough", "Shard", "Talon", "Fang", "Sliver", "Wand", "Cane",
-]
+NOUNS = lang.NOUNS
 
 # --- rarity colours by level (classic loot gradient) -----------------------
 LEVEL_COLORS: Dict[int, tuple] = {
@@ -97,7 +92,7 @@ class Item:
 
 def _generate_name(rng: Rng, level: int) -> str:
     """``level`` words: ``level - 1`` distinct adjectives then a noun."""
-    adjectives = rng.sample(ADJECTIVES, max(0, level - 1))
+    adjectives = rng.sample(ADJECTIVES, max(0, level // 5))
     noun = rng.choice(NOUNS)
     return " ".join([*adjectives, noun])
 
@@ -120,7 +115,7 @@ def _roll_bonus_value(rng: Rng, btype: BonusType, level: int) -> float:
     if btype is BonusType.DODGE_CHANCE:
         return (rng.randint(1, 4) + level) / 100.0
     if btype is BonusType.VIEW_RADIUS:
-        return 1 + (1 if level >= 4 else 0)
+        return rng.randint(1, 2)
     if btype is BonusType.ATTACK_RANGE:
         return level // 10
     return 0  # pragma: no cover - exhaustive above

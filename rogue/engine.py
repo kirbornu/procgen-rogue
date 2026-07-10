@@ -18,6 +18,10 @@ from .rng import Rng
 from .world.game_map import GameMap
 from .world.procgen import generate_noise_dungeon
 
+from importlib import import_module
+lang = import_module(f"rogue.lang.{config.Config.language}")
+msgs = lang.LOG_MESSAGES
+stats = lang.STATS
 
 class Engine:
     def __init__(
@@ -41,7 +45,7 @@ class Engine:
         self.depth = 1
         self.game_map, self.player = self._generator(cfg, self.rng, depth=self.depth)
         self.update_fov()
-        self.log.add("You descend into the dungeon.", config.TITLE_COLOR)
+        self.log.add(msgs['init'], config.TITLE_COLOR)
 
     # --- turn loop ---------------------------------------------------------
     def handle_player_action(self, action: Action) -> None:
@@ -117,7 +121,7 @@ class Engine:
             if portal is not None and portal.dest is not None:
                 self.player.x, self.player.y = portal.dest
                 self.scouting = False
-                self.log.add("You step through a shimmering portal.", config.TELEPORT_COLOR)
+                self.log.add(msgs['portal'], config.TELEPORT_COLOR)
                 return
 
     def on_stairs(self) -> bool:
@@ -132,7 +136,7 @@ class Engine:
         self.scouting = False
         self.update_fov()
         self.log.add(
-            f"You descend to depth {self.depth}. The monsters here are stronger.",
+            f"{msgs['descend'][0]} {self.depth}. {msgs['descend'][1]}",
             config.TITLE_COLOR,
         )
 
@@ -158,11 +162,11 @@ class Engine:
             return
         result = equipment.toggle(item)
         if result == "equip":
-            self.log.add(f"You ready the {item.name}.", item.color)
+            self.log.add(f"{msgs['equip']}{item.name}.", item.color)
         elif result == "unequip":
-            self.log.add(f"You stow the {item.name}.", config.TEXT_DIM)
+            self.log.add(f"{msgs['unequip']}{item.name}.", config.TEXT_DIM)
         else:
-            self.log.add("You can only use two items at once.", config.TEXT_DIM)
+            self.log.add(msgs['limit'], config.TEXT_DIM)
         self.update_fov()  # a view-radius item may have changed sight
 
     def character_sheet(self) -> list[tuple[str, str]]:
@@ -171,21 +175,21 @@ class Engine:
         progress = self.player.get("progress")
         view = self.cfg.fov_radius + int(self._player_bonus(BonusType.VIEW_RADIUS))
         return [
-            ("Max HP", str(fighter.max_hp)),
-            ("Damage", str(fighter.power)),
-            ("Defense", str(fighter.defense)),
-            ("Atk Range", str(fighter.attack_range)),
-            ("Crit", f"{fighter.crit_chance * 100:.0f}%"),
-            ("Dodge", f"{fighter.dodge_chance * 100:.0f}%"),
-            ("View", str(view)),
-            ("Heal", str(self.heal_amount())),
-            ("Gold", str(progress.gold if progress else 0)),
+            (stats['hp'], str(fighter.max_hp)),
+            (stats['dm'], str(fighter.power)),
+            (stats['df'], str(fighter.defense)),
+            (stats['at'], str(fighter.attack_range)),
+            (stats['cr'], f"{fighter.crit_chance * 100:.0f}%"),
+            (stats['dg'], f"{fighter.dodge_chance * 100:.0f}%"),
+            (stats['vw'], str(view)),
+            (stats['hl'], str(self.heal_amount())),
+            (stats['gl'], str(progress.gold if progress else 0)),
         ]
 
     # --- merchant / shop ---------------------------------------------------
     def open_shop(self, merchant: Entity) -> None:
         self.shop = merchant
-        self.log.add("The merchant lays out their wares.", config.MERCHANT_COLOR)
+        self.log.add(msgs['shop'], config.MERCHANT_COLOR)
 
     def close_shop(self) -> None:
         self.shop = None
@@ -209,13 +213,13 @@ class Engine:
             return
         cost = self.upgrade_cost(btype)
         if progress.gold < cost:
-            self.log.add("Not enough gold.", config.TEXT_DIM)
+            self.log.add(msgs['no_gold'], config.TEXT_DIM)
             return
         progress.gold -= cost
         upgrades.buy(btype)
         self.update_fov()
         self.log.add(
-            f"Upgraded {format_bonus(btype, UPGRADE_STEP[btype])} for {cost}g.",
+            f"{msgs['upgrade'][0]} {format_bonus(btype, UPGRADE_STEP[btype])} {msgs['upgrade'][1]} {cost}{msgs['upgrade'][2]}",
             config.MERCHANT_COLOR,
         )
 
@@ -233,19 +237,19 @@ class Engine:
         if progress is not None:
             progress.gold += price
         self.update_fov()
-        self.log.add(f"Sold {item.display_name} for {price}g.", config.MERCHANT_COLOR)
+        self.log.add(f"{msgs['sold'][0]} {item.display_name} {msgs['sold'][1]} {price}{msgs['sold'][2]}", config.MERCHANT_COLOR)
 
     # --- combat outcomes ---------------------------------------------------
     def kill(self, target: Entity, killer: Entity) -> None:
         """Resolve a lethal blow: reward + loot the killer, or end the game."""
         if target is self.player:
-            self.log.add("You die!", config.MONSTER_COLOR)
+            self.log.add(msgs['kill'][0], config.MONSTER_COLOR)
             self.game_over = True
             target.char = "%"
             target.color = config.CORPSE_COLOR
             return
 
-        self.log.add(f"{target.name} dies.", config.CORPSE_COLOR)
+        self.log.add(f"{target.name} {msgs['kill'][1]}", config.CORPSE_COLOR)
         self._award(target, killer)
         self._to_corpse(target)
 
@@ -267,16 +271,16 @@ class Engine:
 
         if inventory is not None:
             if inventory.add(item):
-                self.log.add(f"You loot the {item.display_name}.", item.color)
+                self.log.add(f"{msgs['loot'][0]} {item.display_name}.", item.color)
             else:
-                self.log.add("Your pack is full; the loot is lost.", config.TEXT_DIM)
+                self.log.add(msgs['loot'][1], config.TEXT_DIM)
 
     def _to_corpse(self, entity: Entity) -> None:
         entity.char = "%"
         entity.color = config.CORPSE_COLOR
         entity.blocks_movement = False
         entity.render_order = RenderOrder.CORPSE
-        entity.name = f"remains of {entity.name}"
+        entity.name = f"{lang.SPAWN_NAMES['remains']} {entity.name}"
         # Strip the components that made it a live actor.
         entity._components.pop("ai", None)
         entity._components.pop("fighter", None)

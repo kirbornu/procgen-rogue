@@ -42,6 +42,9 @@ TITLE_COLOR = (0xFF, 0xE0, 0x80)
 class Config:
     """Immutable bag of tunables handed to the systems that need them."""
 
+    # Language of interface
+    language: str = 'ru'
+
     # Console (the whole window, in character cells).
     screen_width: int = 80
     screen_height: int = 50
@@ -69,14 +72,14 @@ class Config:
     wall_threshold: float = 0.4
     max_monsters: int = 40  # cap for a whole cave (grows with depth)
     monster_spacing: int = 45  # ~1 monster per this many floor tiles
-    min_teleport_region: int = 20  # smallest region that still gets a teleport
+    min_teleport_region: int = 40  # smallest region that still gets a teleport
 
     # Combat / progression.
     player_hp: int = 100
     player_power: int = 10
     player_defense: int = 2
     player_attack_range: int = 1  # auto-attack reach, in tiles (Chebyshev)
-    inventory_capacity: int = 64
+    inventory_capacity: int = 128
     equipment_slots: int = 2  # how many items the player can use at once
 
     # Activities (deliberate turns that suppress the auto-attack).

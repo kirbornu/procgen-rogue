@@ -16,6 +16,10 @@ if TYPE_CHECKING:
     from .engine import Engine
     from .entity import Entity
 
+from importlib import import_module
+lang = import_module(f"rogue.lang.{config.Config.language}")
+act = lang.ACTIONS
+
 
 @dataclass
 class ActionResult:
@@ -62,9 +66,9 @@ class HealAction(Action):
             return ActionResult(advances_turn=False)
         recovered = fighter.heal(engine.heal_amount())
         if recovered > 0:
-            engine.log.add(f"You tend your wounds (+{recovered} HP).", config.HP_BAR_FILLED)
+            engine.log.add(f"{act['heal'][0]}{recovered}{act['heal'][1]}", config.HP_BAR_FILLED)
         else:
-            engine.log.add("You are already at full health.", config.TEXT_DIM)
+            engine.log.add(act['heal'][2], config.TEXT_DIM)
         return ActionResult(advances_turn=True, is_activity=True)
 
 
@@ -77,7 +81,7 @@ class ScoutAction(Action):
 
     def perform(self, engine: "Engine") -> ActionResult:
         engine.scouting = True
-        engine.log.add("You scan the surroundings.", config.TITLE_COLOR)
+        engine.log.add(act['scout'], config.TITLE_COLOR)
         return ActionResult(advances_turn=True, is_activity=True)
 
 
@@ -96,7 +100,7 @@ class MoveAction(Action):
             return ActionResult(advances_turn=False)
         if not game_map.is_walkable(dest_x, dest_y):
             if self.actor is engine.player:
-                engine.log.add("The way is blocked.", config.TEXT_DIM)
+                engine.log.add(act['blocked'], config.TEXT_DIM)
             return ActionResult(advances_turn=False)
         if game_map.blocking_entity_at(dest_x, dest_y) is not None:
             return ActionResult(advances_turn=False)
@@ -123,12 +127,12 @@ class MeleeAction(Action):
             return
 
         by_player = attacker is engine.player
-        hit = "hit" if by_player else "hits"  # "You hit" vs "Goblin hits"
+        hit = act['hit'][0] if by_player else act['hit'][1]  # "You hit" vs "Goblin hits"
 
         # The defender may evade the blow entirely.
         if engine.rng.chance(tf.dodge_chance):
-            dodge = "dodge" if target is engine.player else "dodges"
-            engine.log.add(f"{target.name} {dodge} the blow.", config.TEXT_DIM)
+            dodge = act['dodge'][0] if target is engine.player else act['dodge'][1]
+            engine.log.add(f"{target.name} {dodge} {act['dodge'][2]}", config.TEXT_DIM)
             return
 
         damage = max(0, af.power - tf.defense)
@@ -137,15 +141,15 @@ class MeleeAction(Action):
             damage *= 2
 
         if damage > 0:
-            suffix = " (crit!)" if crit else ""
+            suffix = act['dmg'][0] if crit else ""
             color = config.TITLE_COLOR if crit else (
                 config.HP_BAR_FILLED if by_player else config.MONSTER_COLOR
             )
-            engine.log.add(f"{attacker.name} {hit} {target.name} for {damage}{suffix}.", color)
+            engine.log.add(f"{attacker.name} {hit} {target.name} {act['dmg'][1]} {damage}{suffix}.", color)
             tf.take_damage(damage)
         else:
             engine.log.add(
-                f"{attacker.name} {hit} {target.name} but deal no damage.",
+                f"{attacker.name} {hit} {target.name} {act['dmg'][2]}",
                 config.TEXT_DIM,
             )
 

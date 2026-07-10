@@ -8,15 +8,20 @@ from __future__ import annotations
 
 from enum import Enum
 
+from . import config
+
+from importlib import import_module
+lang = import_module(f"rogue.lang.{config.Config.language}")
+stats = lang.STATS
 
 class BonusType(Enum):
-    MAX_HP = "Max HP"
-    DAMAGE = "Damage"
-    ATTACK_RANGE = "Atk Range"
-    VIEW_RADIUS = "View"
-    CRIT_CHANCE = "Crit"
-    DODGE_CHANCE = "Dodge"
-    HEAL_POWER = "Heal"
+    MAX_HP = stats['hp']
+    DAMAGE = stats['dm']
+    ATTACK_RANGE = stats['at']
+    VIEW_RADIUS = stats['vw']
+    CRIT_CHANCE = stats['cr']
+    DODGE_CHANCE = stats['dg']
+    HEAL_POWER = stats['hl']
 
 
 #: Bonuses stored as a 0..1 probability, formatted as a percentage.
@@ -57,8 +62,8 @@ UPGRADE_STEP = {
 UPGRADE_BASE_COST = {
     BonusType.MAX_HP: 40,
     BonusType.DAMAGE: 70,
-    BonusType.ATTACK_RANGE: 400,
-    BonusType.VIEW_RADIUS: 150,
+    BonusType.ATTACK_RANGE: 4000,
+    BonusType.VIEW_RADIUS: 100,
     BonusType.CRIT_CHANCE: 90,
     BonusType.DODGE_CHANCE: 90,
     BonusType.HEAL_POWER: 50,

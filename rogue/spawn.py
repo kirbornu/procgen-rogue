@@ -25,12 +25,16 @@ from .entity import Entity, RenderOrder
 from .items import MAX_LEVEL
 from .rng import Rng
 
+from importlib import import_module
+lang = import_module(f"rogue.lang.{config.Config.language}")
+names = lang.SPAWN_NAMES
+
 # Colour endpoints for the danger gradient (calm green -> lethal red).
 CALM_COLOR = (0x60, 0xB0, 0x60)
 DANGER_COLOR = (0xE8, 0x30, 0x30)
 
 # Flavour: name (and glyph) rise with danger level.
-MONSTER_NAMES = ["Rat", "Goblin", "Brute", "Ogre", "Horror"]
+MONSTER_NAMES = names['monster_names']
 
 
 def make_player(x: int, y: int, cfg: config.Config) -> Entity:
@@ -39,7 +43,7 @@ def make_player(x: int, y: int, cfg: config.Config) -> Entity:
         y,
         char="@",
         color=config.PLAYER_COLOR,
-        name="You",
+        name=names['player_name'],
         blocks_movement=True,
         render_order=RenderOrder.PLAYER,
     )
@@ -115,7 +119,7 @@ def make_teleport(x: int, y: int) -> Entity:
         y,
         char="O",
         color=config.TELEPORT_COLOR,
-        name="portal",
+        name=names['portal_name'],
         blocks_movement=False,
         render_order=RenderOrder.ITEM,
     )
@@ -129,7 +133,7 @@ def make_stairs(x: int, y: int) -> Entity:
         y,
         char=">",
         color=config.STAIRS_COLOR,
-        name="stairs down",
+        name=names['portal_name'],
         blocks_movement=False,
         render_order=RenderOrder.ITEM,
     )
@@ -143,7 +147,7 @@ def make_merchant(x: int, y: int) -> Entity:
         y,
         char="T",
         color=config.MERCHANT_COLOR,
-        name="Merchant",
+        name=names['merchant_name'],
         blocks_movement=True,
         render_order=RenderOrder.ACTOR,
     )
