@@ -591,3 +591,52 @@ def test_language_files_stay_in_sync():
 
     for name in ("SPAWN_NAMES", "STATS", "LOG_MESSAGES", "UI_LABELS", "ACTIONS", "MENU", "TUTORIAL"):
         assert set(getattr(en, name).keys()) == set(getattr(ru, name).keys()), name
+
+
+# --- responsive HUD + menu/language ----------------------------------------
+def test_control_hints_wrap_to_more_rows_when_narrow():
+    from rogue.ui.renderer import Renderer
+
+    r = Renderer(config.DEFAULT)
+    wide = r._wrap_controls(400)
+    narrow = r._wrap_controls(24)
+    assert len(wide) == 1  # everything fits on one row when there's room
+    assert len(narrow) > len(wide)  # a narrow bar needs extra rows
+    # Rows with more than one hint respect the width budget (a single hint
+    # wider than the budget can't be split further, so it may overflow alone).
+    for row in narrow:
+        if len(row) > 1:
+            used = sum(len(k) + 1 + len(lbl) + 2 for k, lbl in row)
+            assert used <= 24 + 2
+
+
+def test_status_groups_pack_into_multiple_lines():
+    from rogue.ui.renderer import Renderer
+
+    groups = [f"g{i} 123" for i in range(6)]
+    one_line = Renderer._pack_groups(groups, 200, 200)
+    many = Renderer._pack_groups(groups, 12, 12)
+    assert len(one_line) == 1
+    assert len(many) > 1
+
+
+def test_menu_labels_and_language_switch():
+    from rogue.ui.renderer import Renderer
+
+    r = Renderer(config.DEFAULT)
+    fresh = r.menu_labels(has_save=False)
+    saved = r.menu_labels(has_save=True)
+    # Play turns into Continue when a save exists; both keep 4 rows incl. Language.
+    assert len(fresh) == len(saved) == len(Renderer.MENU_ITEMS) == 4
+    assert fresh[0] != saved[0]
+    assert "language" in Renderer.MENU_ITEMS
+
+
+def test_language_cycle_picks_a_different_language():
+    from rogue import app
+
+    a = app.App(seed=1, cfg=config.DEFAULT)
+    assert a.restart_lang is None
+    a._cycle_language()
+    assert a.restart_lang in config.LANGUAGES
+    assert a.restart_lang != config.DEFAULT.language

@@ -7,7 +7,11 @@ instead of reaching for globals.
 """
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
+
+#: Languages the UI can switch between (see ``rogue/lang/``).
+LANGUAGES = ("ru", "en")
 
 # --- Colours (RGB) ---------------------------------------------------------
 WHITE = (0xFF, 0xFF, 0xFF)
@@ -42,8 +46,9 @@ TITLE_COLOR = (0xFF, 0xE0, 0x80)
 class Config:
     """Immutable bag of tunables handed to the systems that need them."""
 
-    # Language of interface
-    language: str = 'ru'
+    # Language of interface. Read from the environment so the in-game language
+    # switch can persist a choice across the restart it triggers; defaults to ru.
+    language: str = os.environ.get("ROGUE_LANG", "ru")
 
     # Console (the whole window, in character cells).
     screen_width: int = 80

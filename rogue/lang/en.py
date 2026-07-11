@@ -89,6 +89,8 @@ MENU = {
     'play' : 'Play',
     'continue' : 'Continue',
     'tutorial' : 'Tutorial',
+    'language' : 'Language',
+    'lang_name' : 'English',
     'exit' : 'Exit',
     'hints' : 'up/down move   Enter select   Esc exit',
     'generating' : 'Generating cave...',

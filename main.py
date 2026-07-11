@@ -8,6 +8,8 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import os
+import sys
 
 from rogue import app
 
@@ -21,7 +23,13 @@ def main() -> None:
         help="Seed for reproducible dungeon generation.",
     )
     args = parser.parse_args()
-    app.run(seed=args.seed)
+
+    # The UI language is bound at import time, so switching it in the menu asks
+    # us to relaunch the process with the new choice in the environment.
+    new_language = app.run(seed=args.seed)
+    if new_language:
+        os.environ["ROGUE_LANG"] = new_language
+        os.execv(sys.executable, [sys.executable, *sys.argv])
 
 
 if __name__ == "__main__":
